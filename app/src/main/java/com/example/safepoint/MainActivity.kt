@@ -35,12 +35,24 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.safepoint.ui.theme.SafepointTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Esconde as barras do sistema (navegação e status).
+        // Elas aparecem temporariamente ao deslizar o dedo de baixo para cima.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
         setContent {
             SafepointTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -71,7 +83,7 @@ fun FluxoAutenticacao(modifier: Modifier = Modifier) {
                 usuarios = usuariosCadastrados
             )
         }
-                "CADASTRO" -> {
+        "CADASTRO" -> {
             CadastroScreen(
                 onVoltarParaLogin = { telaAtual = "LOGIN" },
                 onCadastroSucesso = { email, senha ->
@@ -285,145 +297,6 @@ fun TelaLogin(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable { onIrParaCadastro() }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun TelaCadastro(
-    modifier: Modifier = Modifier,
-    onVoltarParaLogin: () -> Unit,
-    onCadastroSucesso: (String, String) -> Unit
-) {
-    var nome by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var senha by remember { mutableStateOf("") }
-    var confirmaSenha by remember { mutableStateOf("") }
-    val context = LocalContext.current
-
-    val azulEscuro = Color(0xFF0F3E8A)
-    val azulLinhas = Color(0xFF1976D2)
-    val verdeGradiente = Color(0xFF1E9B44)
-    val cinzaTexto = Color(0xFF7A8B9E)
-    val cinzaBorda = Color(0xFFD6DFE8)
-
-    val gradientFundo = Brush.linearGradient(
-        colors = listOf(Color(0xFF072B66), Color(0xFF0D52A0), Color(0xFF138A4B))
-    )
-
-    val gradientBotao = Brush.horizontalGradient(
-        colors = listOf(azulEscuro, verdeGradiente)
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(gradientFundo)
-    ) {
-        Card(
-            shape = RoundedCornerShape(36.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(10.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 22.dp)
-                .padding(top = 50.dp, bottom = 30.dp)
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 32.dp)
-            ) {
-                Text("Criar conta", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = azulEscuro)
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                OutlinedTextField(
-                    value = nome,
-                    onValueChange = { nome = it },
-                    placeholder = { Text("Nome completo", color = cinzaTexto) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it.trim() },
-                    placeholder = { Text("E-mail", color = cinzaTexto) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                OutlinedTextField(
-                    value = senha,
-                    onValueChange = { senha = it.trim() },
-                    placeholder = { Text("Senha", color = cinzaTexto) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                OutlinedTextField(
-                    value = confirmaSenha,
-                    onValueChange = { confirmaSenha = it.trim() },
-                    placeholder = { Text("Confirmar Senha", color = cinzaTexto) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(gradientBotao)
-                        .clickable {
-                            when {
-                                nome.isBlank() || email.isBlank() || senha.isBlank() -> {
-                                    Toast.makeText(context, "Preencha todos os campos!", Toast.LENGTH_SHORT).show()
-                                }
-                                senha != confirmaSenha -> {
-                                    Toast.makeText(context, "As senhas não conferem!", Toast.LENGTH_SHORT).show()
-                                }
-                                else -> {
-                                    Toast.makeText(context, "Conta criada! Faça seu login.", Toast.LENGTH_LONG).show()
-                                    onCadastroSucesso(email, senha)
-                                }
-                            }
-                        }
-                ) {
-                    Text("Cadastrar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Row {
-                    Text("Já possui uma conta? ", color = cinzaTexto, fontSize = 13.sp)
-                    Text(
-                        text = "Entrar",
-                        color = azulLinhas,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { onVoltarParaLogin() }
                     )
                 }
             }
