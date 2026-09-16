@@ -22,6 +22,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // Cores do SafePoint
 val SafePointBlue = Color(0xFF0D47A1)
@@ -33,7 +37,8 @@ val GradientEnd = Color(0xFF2E7D32)
 @Composable
 fun CadastroScreen(
     onVoltarParaLogin: () -> Unit,
-    onCadastroSucesso: (String, String) -> Unit
+    onCadastroSucesso: (String, String) -> Unit,
+    viewModel: CadastroViewModel = viewModel()
 ) {
     var nome by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -45,6 +50,20 @@ fun CadastroScreen(
     var senhaVisivel by remember { mutableStateOf(false) }
     var confirmarSenhaVisivel by remember { mutableStateOf(false) }
     var aceitouTermos by remember { mutableStateOf(false) }
+
+    // Controle do calendário
+    var mostrarDatePicker by remember { mutableStateOf(false) }
+
+    val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val sucesso by viewModel.cadastroSucesso.collectAsState()
+
+    // Quando o cadastro for bem-sucedido, chama o callback
+    LaunchedEffect(sucesso) {
+        if (sucesso) {
+            onCadastroSucesso(email, senha)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -113,6 +132,7 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Campo Nome
         OutlinedTextField(
             value = nome,
             onValueChange = { nome = it },
@@ -128,6 +148,7 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        // Campo E-mail
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
@@ -144,6 +165,7 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        // Campo Telefone
         OutlinedTextField(
             value = telefone,
             onValueChange = { telefone = it },
@@ -161,6 +183,7 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        // Campo Senha
         OutlinedTextField(
             value = senha,
             onValueChange = { senha = it },
@@ -186,6 +209,7 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        // Campo Confirmar Senha
         OutlinedTextField(
             value = confirmarSenha,
             onValueChange = { confirmarSenha = it },
@@ -211,23 +235,37 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        OutlinedTextField(
-            value = dataNascimento,
-            onValueChange = { dataNascimento = it },
-            label = { Text("Data de nascimento") },
-            leadingIcon = { Icon(Icons.Outlined.DateRange, contentDescription = null) },
-            trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            readOnly = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = SafePointBlue,
-                focusedLabelColor = SafePointBlue
+        // Campo Data de Nascimento (com calendário)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = dataNascimento,
+                onValueChange = { },
+                label = { Text("Data de nascimento") },
+                leadingIcon = { Icon(Icons.Outlined.DateRange, contentDescription = null) },
+                trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                readOnly = true,
+                enabled = false,
+                colors = OutlinedTextFieldDefaults.colors(
+                    disabledBorderColor = Color(0xFFD6DFE8),
+                    disabledTextColor = Color.Black,
+                    disabledLabelColor = Color.Gray,
+                    disabledLeadingIconColor = SafePointBlue,
+                    disabledTrailingIconColor = SafePointBlue
+                )
             )
-        )
+            // Camada invisível por cima para capturar o clique
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { mostrarDatePicker = true }
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Checkbox Termos
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
@@ -246,10 +284,18 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Botão Cadastrar
         Button(
             onClick = {
-                if (nome.isNotBlank() && email.isNotBlank() && senha.isNotBlank() && senha == confirmarSenha && aceitouTermos) {
-                    onCadastroSucesso(email, senha)
+                if (nome.isNotBlank() && email.isNotBlank() && senha.isNotBlank()
+                    && senha == confirmarSenha && aceitouTermos) {
+                    viewModel.cadastrarUsuario(
+                        nome = nome,
+                        email = email,
+                        telefone = telefone,
+                        senha = senha,
+                        dataNascimento = dataNascimento
+                    )
                 }
             },
             modifier = Modifier
@@ -270,14 +316,29 @@ fun CadastroScreen(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Security, contentDescription = null, tint = Color.White)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Cadastrar", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                if (isLoading) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                } else {
+                    Icon(Icons.Default.Security, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Cadastrar", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
             }
+        }
+
+        // Mostrar mensagem de erro, se houver
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage!!,
+                color = Color.Red,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Link Fazer Login
         Row(
             horizontalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxWidth()
@@ -289,6 +350,35 @@ fun CadastroScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.clickable { onVoltarParaLogin() }
             )
+        }
+    }
+
+    // Diálogo do calendário
+    if (mostrarDatePicker) {
+        val datePickerState = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { mostrarDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedMillis = datePickerState.selectedDateMillis
+                        if (selectedMillis != null) {
+                            val formatter = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR"))
+                            dataNascimento = formatter.format(Date(selectedMillis))
+                        }
+                        mostrarDatePicker = false
+                    }
+                ) {
+                    Text("OK", color = SafePointBlue)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mostrarDatePicker = false }) {
+                    Text("Cancelar", color = Color.Gray)
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }
