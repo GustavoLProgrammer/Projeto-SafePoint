@@ -35,6 +35,9 @@ val SafePointGreen = Color(0xFF2E7D32)
 val GradientStart = Color(0xFF0D47A1)
 val GradientEnd = Color(0xFF2E7D32)
 
+// Cor do texto digitado nos campos
+val TextColorDark = Color(0xFF1A1A1A)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CadastroScreen(
@@ -71,7 +74,7 @@ fun CadastroScreen(
             .fillMaxSize()
             .background(Color.White)
             .verticalScroll(rememberScrollState())
-            .imePadding() // Faz o conteúdo subir quando o teclado aparece
+            .imePadding()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -92,7 +95,7 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Logo (ícone provisório)
+        // Logo
         Icon(
             imageVector = Icons.Default.Security,
             contentDescription = "Logo",
@@ -143,6 +146,8 @@ fun CadastroScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = TextColorDark,
+                unfocusedTextColor = TextColorDark,
                 focusedBorderColor = SafePointBlue,
                 unfocusedBorderColor = Color(0xFFD6DFE8),
                 focusedLeadingIconColor = SafePointBlue,
@@ -162,6 +167,8 @@ fun CadastroScreen(
             shape = RoundedCornerShape(12.dp),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = TextColorDark,
+                unfocusedTextColor = TextColorDark,
                 focusedBorderColor = SafePointBlue,
                 unfocusedBorderColor = Color(0xFFD6DFE8),
                 focusedLeadingIconColor = SafePointBlue,
@@ -181,6 +188,8 @@ fun CadastroScreen(
             shape = RoundedCornerShape(12.dp),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = TextColorDark,
+                unfocusedTextColor = TextColorDark,
                 focusedBorderColor = SafePointBlue,
                 unfocusedBorderColor = Color(0xFFD6DFE8),
                 focusedLeadingIconColor = SafePointBlue,
@@ -209,6 +218,8 @@ fun CadastroScreen(
             shape = RoundedCornerShape(12.dp),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = TextColorDark,
+                unfocusedTextColor = TextColorDark,
                 focusedBorderColor = SafePointBlue,
                 unfocusedBorderColor = Color(0xFFD6DFE8),
                 focusedLeadingIconColor = SafePointBlue,
@@ -239,6 +250,8 @@ fun CadastroScreen(
             shape = RoundedCornerShape(12.dp),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = TextColorDark,
+                unfocusedTextColor = TextColorDark,
                 focusedBorderColor = SafePointBlue,
                 unfocusedBorderColor = Color(0xFFD6DFE8),
                 focusedLeadingIconColor = SafePointBlue,
@@ -264,7 +277,7 @@ fun CadastroScreen(
                 enabled = false,
                 colors = OutlinedTextFieldDefaults.colors(
                     disabledBorderColor = Color(0xFFD6DFE8),
-                    disabledTextColor = Color.Black,
+                    disabledTextColor = TextColorDark,
                     disabledPlaceholderColor = Color.Gray,
                     disabledLeadingIconColor = SafePointBlue,
                     disabledTrailingIconColor = SafePointBlue
@@ -298,7 +311,7 @@ fun CadastroScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Botão Cadastrar (sem ícone)
+        // Botão Cadastrar
         Button(
             onClick = {
                 erroLocal = when {
@@ -348,7 +361,7 @@ fun CadastroScreen(
             }
         }
 
-        // Mensagens de erro (local ou do Firebase)
+        // Mensagens de erro
         val mensagemErro = erroLocal ?: errorMessage
         if (mensagemErro != null) {
             Text(
@@ -386,7 +399,6 @@ fun CadastroScreen(
                     onClick = {
                         val selectedMillis = datePickerState.selectedDateMillis
                         if (selectedMillis != null) {
-                            // Correção do fuso horário: adiciona 12h para compensar UTC-3
                             val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
                             calendar.timeInMillis = selectedMillis
                             calendar.add(Calendar.HOUR_OF_DAY, 12)
