@@ -45,8 +45,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Esconde as barras do sistema (navegação e status).
-        // Elas aparecem temporariamente ao deslizar o dedo de baixo para cima.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
@@ -65,9 +63,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun FluxoAutenticacao(modifier: Modifier = Modifier) {
-    var telaAtual by remember { mutableStateOf("LOGIN") } // "LOGIN", "CADASTRO", "HOME"
+    var telaAtual by remember { mutableStateOf("LOGIN") }
 
-    // Banco de dados em memória com conta de teste padrão
     val usuariosCadastrados = remember {
         mutableStateMapOf(
             "teste@safepoint.com" to "123456"
@@ -119,6 +116,7 @@ fun TelaLogin(
     val verdeGradiente = Color(0xFF1E9B44)
     val cinzaTexto = Color(0xFF7A8B9E)
     val cinzaBorda = Color(0xFFD6DFE8)
+    val textoDigitado = Color(0xFF1A1A1A)
 
     val gradientFundo = Brush.linearGradient(
         colors = listOf(Color(0xFF072B66), Color(0xFF0D52A0), Color(0xFF138A4B)),
@@ -197,6 +195,8 @@ fun TelaLogin(
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = textoDigitado,
+                        unfocusedTextColor = textoDigitado,
                         focusedBorderColor = azulEscuro,
                         unfocusedBorderColor = cinzaBorda
                     ),
@@ -219,6 +219,8 @@ fun TelaLogin(
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = textoDigitado,
+                        unfocusedTextColor = textoDigitado,
                         focusedBorderColor = azulEscuro,
                         unfocusedBorderColor = cinzaBorda
                     ),
@@ -262,7 +264,6 @@ fun TelaLogin(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Botão Entrar
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
@@ -304,7 +305,6 @@ fun TelaLogin(
     }
 }
 
-// Tela exibida após o login com sucesso
 @Composable
 fun TelaHomeSucesso(modifier: Modifier = Modifier, onSair: () -> Unit) {
     Column(
@@ -329,10 +329,6 @@ fun TelaHomeSucesso(modifier: Modifier = Modifier, onSair: () -> Unit) {
         }
     }
 }
-
-// ==========================================
-// DESENHO DA LOGO SAFEPOINT
-// ==========================================
 
 @Composable
 fun LogoSafePoint(modifier: Modifier = Modifier) {
@@ -412,7 +408,6 @@ fun LogoSafePoint(modifier: Modifier = Modifier) {
     }
 }
 
-// Ícones complementares
 @Composable
 fun IconeUsuario(cor: Color, modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
