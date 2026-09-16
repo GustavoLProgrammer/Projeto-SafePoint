@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:914194933416:android:1d1c304303a419eddd849d",
+        "mobilesdk_app_id": "1:914194933416:android:3cc5f5c9d1e2c470dd849d",
         "android_client_info": {
-          "package_name": "om.example.safepoint"
+          "package_name": "com.example.safepoint"
         }
       },
       "oauth_client": [
