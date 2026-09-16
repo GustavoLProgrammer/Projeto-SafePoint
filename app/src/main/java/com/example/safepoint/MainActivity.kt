@@ -1,5 +1,6 @@
 package com.example.safepoint
 
+import com.example.safepoint.ui.screens.CadastroScreen
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -70,9 +71,8 @@ fun FluxoAutenticacao(modifier: Modifier = Modifier) {
                 usuarios = usuariosCadastrados
             )
         }
-        "CADASTRO" -> {
-            TelaCadastro(
-                modifier = modifier,
+                "CADASTRO" -> {
+            CadastroScreen(
                 onVoltarParaLogin = { telaAtual = "LOGIN" },
                 onCadastroSucesso = { email, senha ->
                     usuariosCadastrados[email] = senha
