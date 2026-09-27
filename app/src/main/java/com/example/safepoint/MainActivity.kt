@@ -1,5 +1,6 @@
 package com.example.safepoint
 
+import com.example.safepoint.ForgotPasswordActivity
 import com.example.safepoint.ui.screens.CadastroScreen
 import android.content.Intent
 import android.os.Bundle
