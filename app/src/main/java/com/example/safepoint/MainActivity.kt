@@ -39,6 +39,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.safepoint.ui.theme.SafepointTheme
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,24 +66,18 @@ class MainActivity : ComponentActivity() {
 fun FluxoAutenticacao(modifier: Modifier = Modifier) {
     var telaAtual by remember { mutableStateOf("LOGIN") }
 
-    val usuariosCadastrados = remember {
-        mutableStateMapOf<String, String>()
-    }
-
     when (telaAtual) {
         "LOGIN" -> {
             TelaLogin(
                 modifier = modifier,
                 onIrParaCadastro = { telaAtual = "CADASTRO" },
-                onLoginSucesso = { telaAtual = "HOME" },
-                usuarios = usuariosCadastrados
+                onLoginSucesso = { telaAtual = "HOME" }
             )
         }
         "CADASTRO" -> {
             CadastroScreen(
                 onVoltarParaLogin = { telaAtual = "LOGIN" },
                 onCadastroSucesso = { email, senha ->
-                    usuariosCadastrados[email] = senha
                     telaAtual = "LOGIN"
                 }
             )
@@ -100,8 +95,7 @@ fun FluxoAutenticacao(modifier: Modifier = Modifier) {
 fun TelaLogin(
     modifier: Modifier = Modifier,
     onIrParaCadastro: () -> Unit,
-    onLoginSucesso: () -> Unit,
-    usuarios: Map<String, String>
+    onLoginSucesso: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var senha by remember { mutableStateOf("") }
@@ -265,11 +259,16 @@ fun TelaLogin(
                         .clickable {
                             if (email.isBlank() || senha.isBlank()) {
                                 Toast.makeText(context, "Preencha e-mail e senha!", Toast.LENGTH_SHORT).show()
-                            } else if (usuarios[email] == senha) {
-                                Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show()
-                                onLoginSucesso()
                             } else {
-                                Toast.makeText(context, "E-mail ou senha incorretos!", Toast.LENGTH_LONG).show()
+                                FirebaseAuth.getInstance().signInWithEmailAndPassword(email, senha)
+                                    .addOnCompleteListener { task ->
+                                        if (task.isSuccessful) {
+                                            Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show()
+                                            onLoginSucesso()
+                                        } else {
+                                            Toast.makeText(context, "E-mail ou senha incorretos!", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
                             }
                         }
                 ) {
@@ -313,7 +312,10 @@ fun TelaHomeSucesso(modifier: Modifier = Modifier, onSair: () -> Unit) {
         Text("Login efetuado com sucesso.", color = Color(0xFF1EA84C), fontSize = 16.sp)
         Spacer(modifier = Modifier.height(32.dp))
         Button(
-            onClick = onSair,
+            onClick = {
+                FirebaseAuth.getInstance().signOut()
+                onSair()
+            },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1EA84C))
         ) {
             Text("Sair da conta", color = Color.White)
