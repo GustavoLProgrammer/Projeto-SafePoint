@@ -1,6 +1,8 @@
 package com.example.safepoint
 
+import com.example.safepoint.ForgotPasswordActivity
 import com.example.safepoint.ui.screens.CadastroScreen
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -8,11 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -39,6 +39,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.safepoint.ui.theme.SafepointTheme
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,26 +66,18 @@ class MainActivity : ComponentActivity() {
 fun FluxoAutenticacao(modifier: Modifier = Modifier) {
     var telaAtual by remember { mutableStateOf("LOGIN") }
 
-    val usuariosCadastrados = remember {
-        mutableStateMapOf(
-            "teste@safepoint.com" to "123456"
-        )
-    }
-
     when (telaAtual) {
         "LOGIN" -> {
             TelaLogin(
                 modifier = modifier,
                 onIrParaCadastro = { telaAtual = "CADASTRO" },
-                onLoginSucesso = { telaAtual = "HOME" },
-                usuarios = usuariosCadastrados
+                onLoginSucesso = { telaAtual = "HOME" }
             )
         }
         "CADASTRO" -> {
             CadastroScreen(
                 onVoltarParaLogin = { telaAtual = "LOGIN" },
                 onCadastroSucesso = { email, senha ->
-                    usuariosCadastrados[email] = senha
                     telaAtual = "LOGIN"
                 }
             )
@@ -102,8 +95,7 @@ fun FluxoAutenticacao(modifier: Modifier = Modifier) {
 fun TelaLogin(
     modifier: Modifier = Modifier,
     onIrParaCadastro: () -> Unit,
-    onLoginSucesso: () -> Unit,
-    usuarios: Map<String, String>
+    onLoginSucesso: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
     var senha by remember { mutableStateOf("") }
@@ -175,14 +167,6 @@ fun TelaLogin(
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = azulEscuro
-                )
-
-                Text(
-                    text = "Conta teste: teste@safepoint.com | 123456",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = verdeGradiente,
-                    modifier = Modifier.padding(top = 4.dp)
                 )
 
                 Spacer(modifier = Modifier.height(22.dp))
@@ -257,7 +241,8 @@ fun TelaLogin(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable {
-                            Toast.makeText(context, "Use: teste@safepoint.com / 123456", Toast.LENGTH_LONG).show()
+                            val intent = Intent(context, ForgotPasswordActivity::class.java)
+                            context.startActivity(intent)
                         }
                     )
                 }
@@ -274,11 +259,16 @@ fun TelaLogin(
                         .clickable {
                             if (email.isBlank() || senha.isBlank()) {
                                 Toast.makeText(context, "Preencha e-mail e senha!", Toast.LENGTH_SHORT).show()
-                            } else if (usuarios[email] == senha) {
-                                Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show()
-                                onLoginSucesso()
                             } else {
-                                Toast.makeText(context, "E-mail ou senha incorretos!", Toast.LENGTH_LONG).show()
+                                FirebaseAuth.getInstance().signInWithEmailAndPassword(email, senha)
+                                    .addOnCompleteListener { task ->
+                                        if (task.isSuccessful) {
+                                            Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show()
+                                            onLoginSucesso()
+                                        } else {
+                                            Toast.makeText(context, "E-mail ou senha incorretos!", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
                             }
                         }
                 ) {
@@ -322,7 +312,10 @@ fun TelaHomeSucesso(modifier: Modifier = Modifier, onSair: () -> Unit) {
         Text("Login efetuado com sucesso.", color = Color(0xFF1EA84C), fontSize = 16.sp)
         Spacer(modifier = Modifier.height(32.dp))
         Button(
-            onClick = onSair,
+            onClick = {
+                FirebaseAuth.getInstance().signOut()
+                onSair()
+            },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1EA84C))
         ) {
             Text("Sair da conta", color = Color.White)
@@ -335,16 +328,13 @@ fun LogoSafePoint(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-
         val azulEscuro = Color(0xFF0F3E8A)
         val verdeEscudo = Color(0xFF1EA84C)
-
         val escudoGradient = Brush.verticalGradient(
             colors = listOf(Color(0xFF0C3875), Color(0xFF138A4B)),
             startY = 0f,
             endY = h
         )
-
         val pathEscudoExterno = Path().apply {
             moveTo(w * 0.5f, h * 0.05f)
             cubicTo(w * 0.82f, h * 0.05f, w * 0.94f, h * 0.18f, w * 0.94f, h * 0.42f)
@@ -353,13 +343,7 @@ fun LogoSafePoint(modifier: Modifier = Modifier) {
             cubicTo(w * 0.06f, h * 0.18f, w * 0.18f, h * 0.05f, w * 0.5f, h * 0.05f)
             close()
         }
-
-        drawPath(
-            path = pathEscudoExterno,
-            brush = escudoGradient,
-            style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-        )
-
+        drawPath(path = pathEscudoExterno, brush = escudoGradient, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
         val pathEscudoInterno = Path().apply {
             moveTo(w * 0.5f, h * 0.13f)
             cubicTo(w * 0.75f, h * 0.13f, w * 0.84f, h * 0.24f, w * 0.84f, h * 0.44f)
@@ -370,38 +354,22 @@ fun LogoSafePoint(modifier: Modifier = Modifier) {
         }
         drawPath(path = pathEscudoInterno, color = Color(0x181EA84C), style = Fill)
         drawPath(path = pathEscudoInterno, color = verdeEscudo.copy(alpha = 0.5f), style = Stroke(width = 1.2.dp.toPx()))
-
         val pinCentroX = w * 0.5f
         val pinTopoY = h * 0.28f
         val pinRaio = w * 0.18f
         val pinPontaY = h * 0.70f
-
         val pathPin = Path().apply {
             moveTo(pinCentroX, pinPontaY)
-            cubicTo(
-                pinCentroX - pinRaio * 0.95f, pinPontaY - h * 0.14f,
-                pinCentroX - pinRaio, pinTopoY + pinRaio * 1.1f,
-                pinCentroX - pinRaio, pinTopoY + pinRaio
-            )
+            cubicTo(pinCentroX - pinRaio * 0.95f, pinPontaY - h * 0.14f, pinCentroX - pinRaio, pinTopoY + pinRaio * 1.1f, pinCentroX - pinRaio, pinTopoY + pinRaio)
             arcTo(
-                rect = androidx.compose.ui.geometry.Rect(
-                    left = pinCentroX - pinRaio,
-                    top = pinTopoY,
-                    right = pinCentroX + pinRaio,
-                    bottom = pinTopoY + pinRaio * 2f
-                ),
+                rect = androidx.compose.ui.geometry.Rect(left = pinCentroX - pinRaio, top = pinTopoY, right = pinCentroX + pinRaio, bottom = pinTopoY + pinRaio * 2f),
                 startAngleDegrees = 180f,
                 sweepAngleDegrees = 180f,
                 forceMoveTo = false
             )
-            cubicTo(
-                pinCentroX + pinRaio, pinTopoY + pinRaio * 1.1f,
-                pinCentroX + pinRaio * 0.95f, pinPontaY - h * 0.14f,
-                pinCentroX, pinPontaY
-            )
+            cubicTo(pinCentroX + pinRaio, pinTopoY + pinRaio * 1.1f, pinCentroX + pinRaio * 0.95f, pinPontaY - h * 0.14f, pinCentroX, pinPontaY)
             close()
         }
-
         drawPath(path = pathPin, color = azulEscuro, style = Fill)
         drawCircle(color = Color.White, radius = pinRaio * 0.40f, center = Offset(pinCentroX, pinTopoY + pinRaio))
         drawCircle(color = verdeEscudo, radius = pinRaio * 0.22f, center = Offset(pinCentroX, pinTopoY + pinRaio))
