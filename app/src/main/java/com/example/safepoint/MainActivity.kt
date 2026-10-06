@@ -1,294 +1,196 @@
 package com.example.safepoint
 
-import com.example.safepoint.ForgotPasswordActivity
-import com.example.safepoint.ui.screens.CadastroScreen
-import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import com.example.safepoint.ui.theme.SafepointTheme
-import com.google.firebase.auth.FirebaseAuth
+
+// Modelo de Dados dos Alertas
+data class AlertaRota(
+    val id: String,
+    val titulo: String,
+    val dataHora: String,
+    val localizacao: String,
+    val gravidade: String
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-
         setContent {
-            SafepointTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    FluxoAutenticacao(modifier = Modifier.padding(innerPadding))
-                }
+            MaterialTheme {
+                TelaHistoricoSafepoint()
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FluxoAutenticacao(modifier: Modifier = Modifier) {
-    var telaAtual by remember { mutableStateOf("LOGIN") }
+fun TelaHistoricoSafepoint() {
+    var textoPesquisa by remember { mutableStateOf("") }
+    var filtroSelecionado by remember { mutableStateOf("Todas") }
 
-    when (telaAtual) {
-        "LOGIN" -> {
-            TelaLogin(
-                modifier = modifier,
-                onIrParaCadastro = { telaAtual = "CADASTRO" },
-                onLoginSucesso = { telaAtual = "HOME" }
-            )
-        }
-        "CADASTRO" -> {
-            CadastroScreen(
-                onVoltarParaLogin = { telaAtual = "LOGIN" },
-                onCadastroSucesso = { email, senha ->
-                    telaAtual = "LOGIN"
-                }
-            )
-        }
-        "HOME" -> {
-            TelaHomeSucesso(
-                modifier = modifier,
-                onSair = { telaAtual = "LOGIN" }
-            )
-        }
+    // Dados de exemplo baseados no mockup
+    val listaAlertas = remember {
+        listOf(
+            AlertaRota("1", "Enchente Severa - Rio Doce", "15/08/2024, 14:30", "Rua Frei Caneca, 340 - Centro, São Paulo - SP", "Crítica"),
+            AlertaRota("2", "Deslizamento de Terra - Morro da Cruz", "10/08/2024, 09:15", "Rua Pedro Álvares Cabral, 12 - Morro da Cruz, Porto Alegre - RS", "Alta"),
+            AlertaRota("3", "Tempestade Tropical - Litoral Norte", "05/08/2024, 18:00", "Praia Grande - Ubatuba - SP", "Média"),
+            AlertaRota("4", "Alerta de Inundação - Rio Tietê", "01/08/2024, 11:00", "Marginal Tietê - Ponte das Bandeiras, São Paulo - SP", "Alta")
+        )
     }
-}
 
-@Composable
-fun TelaLogin(
-    modifier: Modifier = Modifier,
-    onIrParaCadastro: () -> Unit,
-    onLoginSucesso: () -> Unit
-) {
-    var email by remember { mutableStateOf("") }
-    var senha by remember { mutableStateOf("") }
-    var lembrarMe by remember { mutableStateOf(false) }
-    var senhaVisivel by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    // Filtragem em tempo real pelo texto de busca
+    val alertasFiltrados = listaAlertas.filter {
+        it.titulo.contains(textoPesquisa, ignoreCase = true) ||
+                it.localizacao.contains(textoPesquisa, ignoreCase = true)
+    }
 
-    val azulEscuro = Color(0xFF0F3E8A)
-    val azulLinhas = Color(0xFF1976D2)
-    val verdeGradiente = Color(0xFF1E9B44)
-    val cinzaTexto = Color(0xFF7A8B9E)
-    val cinzaBorda = Color(0xFFD6DFE8)
-    val textoDigitado = Color(0xFF1A1A1A)
+    val opcoesFiltro = listOf("Todas", "Hoje", "Esta semana", "Este mês", "Período")
 
-    val gradientFundo = Brush.linearGradient(
-        colors = listOf(Color(0xFF072B66), Color(0xFF0D52A0), Color(0xFF138A4B)),
-        start = Offset(0f, 0f),
-        end = Offset(1200f, 2200f)
-    )
-
-    val gradientBotao = Brush.horizontalGradient(
-        colors = listOf(azulEscuro, verdeGradiente)
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(gradientFundo)
-    ) {
-        Card(
-            shape = RoundedCornerShape(36.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(10.dp),
+    Scaffold(
+        bottomBar = { BarraNavegacaoInferior() }
+    ) { paddingValues ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 22.dp)
-                .padding(top = 76.dp, bottom = 28.dp)
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color(0xFFF6F8FA))
+                .padding(horizontal = 16.dp)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // Cabeçalho: Logo + Nome + Notificação
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 30.dp)
+                    .padding(top = 16.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                LogoSafePoint(modifier = Modifier.size(92.dp))
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "SAFEPOINT",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.5.sp,
-                    color = azulEscuro
-                )
-
-                Text(
-                    text = "Sempre te guiando a um ponto seguro",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = azulEscuro
-                )
-
-                Spacer(modifier = Modifier.height(30.dp))
-
-                Text(
-                    text = "Faça seu login",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = azulEscuro
-                )
-
-                Spacer(modifier = Modifier.height(22.dp))
-
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it.trim() },
-                    placeholder = { Text("E-mail", color = cinzaTexto, fontSize = 14.sp) },
-                    leadingIcon = { IconeUsuario(cor = azulEscuro, modifier = Modifier.size(20.dp)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = textoDigitado,
-                        unfocusedTextColor = textoDigitado,
-                        focusedBorderColor = azulEscuro,
-                        unfocusedBorderColor = cinzaBorda
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                OutlinedTextField(
-                    value = senha,
-                    onValueChange = { senha = it.trim() },
-                    placeholder = { Text("Senha", color = cinzaTexto, fontSize = 14.sp) },
-                    leadingIcon = { IconeCadeado(cor = azulEscuro, modifier = Modifier.size(20.dp)) },
-                    trailingIcon = {
-                        IconButton(onClick = { senhaVisivel = !senhaVisivel }) {
-                            IconeOlho(aberto = senhaVisivel, cor = cinzaTexto, modifier = Modifier.size(22.dp))
-                        }
-                    },
-                    visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = textoDigitado,
-                        unfocusedTextColor = textoDigitado,
-                        focusedBorderColor = azulEscuro,
-                        unfocusedBorderColor = cinzaBorda
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { lembrarMe = !lembrarMe }
-                    ) {
-                        Checkbox(
-                            checked = lembrarMe,
-                            onCheckedChange = { lembrarMe = it },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = verdeGradiente,
-                                uncheckedColor = cinzaBorda
-                            ),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Lembrar-me", color = azulEscuro, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    }
-
-                    Text(
-                        text = "Esqueci minha senha",
-                        color = azulLinhas,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable {
-                            val intent = Intent(context, ForgotPasswordActivity::class.java)
-                            context.startActivity(intent)
-                        }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = "Logo",
+                        tint = Color(0xFF1E88E5),
+                        modifier = Modifier.size(32.dp)
                     )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(gradientBotao)
-                        .clickable {
-                            if (email.isBlank() || senha.isBlank()) {
-                                Toast.makeText(context, "Preencha e-mail e senha!", Toast.LENGTH_SHORT).show()
-                            } else {
-                                FirebaseAuth.getInstance().signInWithEmailAndPassword(email, senha)
-                                    .addOnCompleteListener { task ->
-                                        if (task.isSuccessful) {
-                                            Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show()
-                                            onLoginSucesso()
-                                        } else {
-                                            Toast.makeText(context, "E-mail ou senha incorretos!", Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                            }
-                        }
-                ) {
-                    Text("Entrar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(modifier = Modifier.height(22.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Não tem uma conta? ", color = cinzaTexto, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Criar conta",
-                        color = azulLinhas,
-                        fontSize = 13.sp,
+                        text = "Safepoint",
+                        fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { onIrParaCadastro() }
+                        color = Color(0xFF1B3B6F)
                     )
+                }
+
+                IconButton(onClick = { }) {
+                    Icon(
+                        imageVector = Icons.Default.Notifications,
+                        contentDescription = "Notificações",
+                        tint = Color(0xFF1B3B6F)
+                    )
+                }
+            }
+
+            // Título principal da página
+            Text(
+                text = "Histórico de Rotas",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1B3B6F),
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(vertical = 8.dp)
+            )
+
+            // Campo de Pesquisa
+            OutlinedTextField(
+                value = textoPesquisa,
+                onValueChange = { textoPesquisa = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                placeholder = { Text("Pesquisar rotas...", color = Color.Gray) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
+                shape = RoundedCornerShape(24.dp),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    unfocusedBorderColor = Color(0xFFDCDCDC)
+                )
+            )
+
+            // Seção de Filtros (Filtro por chips)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Filtrar por:",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1B3B6F),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(opcoesFiltro) { opcao ->
+                        val selecionado = (opcao == filtroSelecionado)
+                        FilterChip(
+                            selected = selecionado,
+                            onClick = { filtroSelecionado = opcao },
+                            label = { Text(opcao) },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF2E7D32),
+                                selectedLabelColor = Color.White,
+                                containerColor = Color.White,
+                                labelColor = Color.DarkGray
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Lista de Cards de Ocorrências
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(top = 8.dp)
+            ) {
+                items(alertasFiltrados) { alerta ->
+                    CardAlertaItem(alerta = alerta)
                 }
             }
         }
@@ -296,143 +198,125 @@ fun TelaLogin(
 }
 
 @Composable
-fun TelaHomeSucesso(modifier: Modifier = Modifier, onSair: () -> Unit) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF0F3E8A))
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+fun CardAlertaItem(alerta: AlertaRota) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        LogoSafePoint(modifier = Modifier.size(120.dp))
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Bem-vindo ao SafePoint!", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Login efetuado com sucesso.", color = Color(0xFF1EA84C), fontSize = 16.sp)
-        Spacer(modifier = Modifier.height(32.dp))
-        Button(
-            onClick = {
-                FirebaseAuth.getInstance().signOut()
-                onSair()
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1EA84C))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Sair da conta", color = Color.White)
+            // Ícone da categoria em um círculo azul claro
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(Color(0xFFE1F5FE), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.WaterDrop,
+                    contentDescription = null,
+                    tint = Color(0xFF0288D1),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Informações do Alerta
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = alerta.titulo,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = Color(0xFF1B3B6F)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = alerta.dataHora, fontSize = 12.sp, color = Color.Gray)
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = alerta.localizacao, fontSize = 12.sp, color = Color.Gray, maxLines = 1)
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                val corGravidade = when (alerta.gravidade) {
+                    "Crítica" -> Color.Red
+                    "Alta" -> Color(0xFFFFA000)
+                    else -> Color(0xFFFBC02D)
+                }
+
+                Text(
+                    text = alerta.gravidade,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = corGravidade
+                )
+            }
+
+            // Ação 'visualizar >'
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 4.dp)
+            ) {
+                Text(
+                    text = "visualizar",
+                    color = Color(0xFF1976D2),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Visualizar",
+                    tint = Color(0xFF1976D2),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }
 
 @Composable
-fun LogoSafePoint(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val azulEscuro = Color(0xFF0F3E8A)
-        val verdeEscudo = Color(0xFF1EA84C)
-        val escudoGradient = Brush.verticalGradient(
-            colors = listOf(Color(0xFF0C3875), Color(0xFF138A4B)),
-            startY = 0f,
-            endY = h
+fun BarraNavegacaoInferior() {
+    NavigationBar(containerColor = Color.White) {
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Icon(Icons.Default.Home, contentDescription = "Início") },
+            label = { Text("Início") }
         )
-        val pathEscudoExterno = Path().apply {
-            moveTo(w * 0.5f, h * 0.05f)
-            cubicTo(w * 0.82f, h * 0.05f, w * 0.94f, h * 0.18f, w * 0.94f, h * 0.42f)
-            cubicTo(w * 0.94f, h * 0.72f, w * 0.52f, h * 0.96f, w * 0.5f, h * 0.98f)
-            cubicTo(w * 0.48f, h * 0.96f, w * 0.06f, h * 0.72f, w * 0.06f, h * 0.42f)
-            cubicTo(w * 0.06f, h * 0.18f, w * 0.18f, h * 0.05f, w * 0.5f, h * 0.05f)
-            close()
-        }
-        drawPath(path = pathEscudoExterno, brush = escudoGradient, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
-        val pathEscudoInterno = Path().apply {
-            moveTo(w * 0.5f, h * 0.13f)
-            cubicTo(w * 0.75f, h * 0.13f, w * 0.84f, h * 0.24f, w * 0.84f, h * 0.44f)
-            cubicTo(w * 0.84f, h * 0.67f, w * 0.52f, h * 0.86f, w * 0.5f, h * 0.88f)
-            cubicTo(w * 0.48f, h * 0.86f, w * 0.16f, h * 0.67f, w * 0.16f, h * 0.44f)
-            cubicTo(w * 0.16f, h * 0.24f, w * 0.25f, h * 0.13f, w * 0.5f, h * 0.13f)
-            close()
-        }
-        drawPath(path = pathEscudoInterno, color = Color(0x181EA84C), style = Fill)
-        drawPath(path = pathEscudoInterno, color = verdeEscudo.copy(alpha = 0.5f), style = Stroke(width = 1.2.dp.toPx()))
-        val pinCentroX = w * 0.5f
-        val pinTopoY = h * 0.28f
-        val pinRaio = w * 0.18f
-        val pinPontaY = h * 0.70f
-        val pathPin = Path().apply {
-            moveTo(pinCentroX, pinPontaY)
-            cubicTo(pinCentroX - pinRaio * 0.95f, pinPontaY - h * 0.14f, pinCentroX - pinRaio, pinTopoY + pinRaio * 1.1f, pinCentroX - pinRaio, pinTopoY + pinRaio)
-            arcTo(
-                rect = androidx.compose.ui.geometry.Rect(left = pinCentroX - pinRaio, top = pinTopoY, right = pinCentroX + pinRaio, bottom = pinTopoY + pinRaio * 2f),
-                startAngleDegrees = 180f,
-                sweepAngleDegrees = 180f,
-                forceMoveTo = false
-            )
-            cubicTo(pinCentroX + pinRaio, pinTopoY + pinRaio * 1.1f, pinCentroX + pinRaio * 0.95f, pinPontaY - h * 0.14f, pinCentroX, pinPontaY)
-            close()
-        }
-        drawPath(path = pathPin, color = azulEscuro, style = Fill)
-        drawCircle(color = Color.White, radius = pinRaio * 0.40f, center = Offset(pinCentroX, pinTopoY + pinRaio))
-        drawCircle(color = verdeEscudo, radius = pinRaio * 0.22f, center = Offset(pinCentroX, pinTopoY + pinRaio))
-    }
-}
-
-@Composable
-fun IconeUsuario(cor: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val stroke = Stroke(width = 1.8.dp.toPx())
-        drawCircle(color = cor, radius = w * 0.25f, center = Offset(w * 0.5f, h * 0.32f), style = stroke)
-        val corpoPath = Path().apply {
-            moveTo(w * 0.15f, h * 0.92f)
-            cubicTo(w * 0.15f, h * 0.68f, w * 0.85f, h * 0.68f, w * 0.85f, h * 0.92f)
-        }
-        drawPath(path = corpoPath, color = cor, style = stroke)
-    }
-}
-
-@Composable
-fun IconeCadeado(cor: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val stroke = Stroke(width = 1.8.dp.toPx())
-        drawRoundRect(
-            color = cor,
-            topLeft = Offset(w * 0.18f, h * 0.42f),
-            size = Size(w * 0.64f, h * 0.52f),
-            cornerRadius = CornerRadius(4.dp.toPx()),
-            style = stroke
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Icon(Icons.Default.Map, contentDescription = "Mapa") },
+            label = { Text("Mapa") }
         )
-        val arcoPath = Path().apply {
-            moveTo(w * 0.30f, h * 0.42f)
-            lineTo(w * 0.30f, h * 0.24f)
-            cubicTo(w * 0.30f, h * 0.08f, w * 0.70f, h * 0.08f, w * 0.70f, h * 0.24f)
-            lineTo(w * 0.70f, h * 0.42f)
-        }
-        drawPath(path = arcoPath, color = cor, style = stroke)
-        drawCircle(color = cor, radius = 2.dp.toPx(), center = Offset(w * 0.5f, h * 0.65f))
-    }
-}
-
-@Composable
-fun IconeOlho(aberto: Boolean, cor: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
-        val olhoPath = Path().apply {
-            moveTo(w * 0.1f, h * 0.5f)
-            cubicTo(w * 0.3f, h * 0.2f, w * 0.7f, h * 0.2f, w * 0.9f, h * 0.5f)
-            cubicTo(w * 0.7f, h * 0.8f, w * 0.3f, h * 0.8f, w * 0.1f, h * 0.5f)
-            close()
-        }
-        drawPath(path = olhoPath, color = cor, style = stroke)
-        if (aberto) {
-            drawCircle(color = cor, radius = w * 0.15f, center = Offset(w * 0.5f, h * 0.5f))
-        } else {
-            drawCircle(color = cor, radius = w * 0.13f, center = Offset(w * 0.5f, h * 0.5f))
-            drawLine(color = cor, start = Offset(w * 0.2f, h * 0.2f), end = Offset(w * 0.8f, h * 0.8f), strokeWidth = stroke.width)
-        }
+        NavigationBarItem(
+            selected = true,
+            onClick = { },
+            icon = { Icon(Icons.Default.DateRange, contentDescription = "Histórico") },
+            label = { Text("Histórico") }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick = { },
+            icon = { Icon(Icons.Default.Person, contentDescription = "Perfil") },
+            label = { Text("Perfil") }
+        )
     }
 }
