@@ -71,7 +71,7 @@ fun FluxoAutenticacao(modifier: Modifier = Modifier) {
         )
     }
 
-    when (telaAtual) {
+   when (telaAtual) {
         "LOGIN" -> {
             TelaLogin(
                 modifier = modifier,
@@ -80,6 +80,7 @@ fun FluxoAutenticacao(modifier: Modifier = Modifier) {
                 usuarios = usuariosCadastrados
             )
         }
+
         "CADASTRO" -> {
             CadastroScreen(
                 onVoltarParaLogin = { telaAtual = "LOGIN" },
@@ -89,10 +90,23 @@ fun FluxoAutenticacao(modifier: Modifier = Modifier) {
                 }
             )
         }
+
         "HOME" -> {
-            TelaHomeSucesso(
-                modifier = modifier,
-                onSair = { telaAtual = "LOGIN" }
+            HomeScreen(
+                onAbrirSOS = { telaAtual = "SOS" },
+                onAbrirAjuda = { telaAtual = "AJUDA" }
+            )
+        }
+
+        "SOS" -> {
+            TelaSOS(
+                onVoltar = { telaAtual = "HOME" }
+            )
+        }
+
+        "AJUDA" -> {
+            TelaAjuda(
+                onVoltar = { telaAtual = "HOME" }
             )
         }
     }
