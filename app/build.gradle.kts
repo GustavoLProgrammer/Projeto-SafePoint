@@ -47,6 +47,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     
     // ===== FIREBASE =====
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
