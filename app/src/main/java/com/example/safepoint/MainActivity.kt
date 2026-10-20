@@ -2,6 +2,7 @@ package com.example.safepoint
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -50,14 +52,18 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import java.text.SimpleDateFormat
+import java.util.*
 
 // ================= CORES =================
 val CorAzulEscuro = Color(0xFF0F3E8A)
@@ -81,13 +87,13 @@ data class AlertaRota(
     val dataHora: String,
     val localizacao: String,
     val gravidade: String,
+    val tipo: String,
     val latitude: Double,
     val longitude: Double
 )
 
 // ================= SCREENS =================
 sealed class Screen(val route: String) {
-    object Termos : Screen("termos")
     object Login : Screen("login")
     object Cadastro : Screen("cadastro")
     object RecuperarSenha : Screen("recuperar_senha")
@@ -103,13 +109,6 @@ sealed class Screen(val route: String) {
 object PrefsHelper {
     fun getPrefs(context: Context): SharedPreferences =
         context.getSharedPreferences("safepoint_prefs", Context.MODE_PRIVATE)
-
-    fun isTermosAceitos(context: Context): Boolean =
-        getPrefs(context).getBoolean("termos_aceitos", false)
-
-    fun setTermosAceitos(context: Context, aceito: Boolean) {
-        getPrefs(context).edit().putBoolean("termos_aceitos", aceito).apply()
-    }
 
     fun getUserId(context: Context): String? =
         getPrefs(context).getString("user_id", null)
@@ -133,7 +132,7 @@ class MainActivity : ComponentActivity() {
         auth = FirebaseAuth.getInstance()
         db = FirebaseFirestore.getInstance()
 
-        // CORRIGE O ERRO 403 DO MAPA
+        // CORRIGE O ERRO 403 DO MAPA - User-Agent obrigatório
         Configuration.getInstance().userAgentValue = packageName
         Configuration.getInstance().load(
             this,
@@ -143,33 +142,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val navController = rememberNavController()
-                val context = LocalContext.current
-                val termosAceitos = PrefsHelper.isTermosAceitos(context)
                 val currentUser = auth.currentUser
-
-                val startDest = when {
-                    !termosAceitos -> Screen.Termos.route
-                    currentUser == null -> Screen.Login.route
-                    else -> Screen.Home.route
-                }
+                val startDest = if (currentUser != null) Screen.Home.route else Screen.Login.route
 
                 NavHost(navController = navController, startDestination = startDest) {
-                    composable(Screen.Termos.route) {
-                        TelaTermosUso(
-                            onAceitar = {
-                                PrefsHelper.setTermosAceitos(context, true)
-                                if (currentUser != null) {
-                                    navController.navigate(Screen.Home.route) {
-                                        popUpTo(Screen.Termos.route) { inclusive = true }
-                                    }
-                                } else {
-                                    navController.navigate(Screen.Login.route) {
-                                        popUpTo(Screen.Termos.route) { inclusive = true }
-                                    }
-                                }
-                            }
-                        )
-                    }
                     composable(Screen.Login.route) { TelaLogin(navController, auth) }
                     composable(Screen.Cadastro.route) { TelaCadastro(navController, auth) }
                     composable(Screen.RecuperarSenha.route) { TelaRecuperarSenha(navController, auth) }
@@ -185,29 +161,32 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ================= LOGO PIN (exatamente como na imagem) =================
+// ================= LOGO PIN (Login e Recuperar Senha) =================
 @Composable
 fun LogoPinSafepoint() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
+            // Círculo verde externo
             Box(
                 modifier = Modifier
-                    .size(90.dp)
+                    .size(100.dp)
                     .clip(CircleShape)
                     .background(Color(0xFFE8F5E9))
                     .border(3.dp, Color(0xFF1EA84C), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
+                // Círculo azul médio
                 Box(
                     modifier = Modifier
-                        .size(65.dp)
+                        .size(70.dp)
                         .clip(CircleShape)
                         .background(CorAzulEscuro),
                     contentAlignment = Alignment.Center
                 ) {
+                    // Ponto branco no centro
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
                             .background(Color.White)
                     )
@@ -225,24 +204,34 @@ fun LogoPinSafepoint() {
     }
 }
 
-// ================= LOGO ESCUDO =================
+// ================= LOGO ESCUDO COM CONTORNO AZUL (Cadastro) =================
 @Composable
 fun LogoEscudoSafepoint() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.Center) {
+            // Contorno azul do escudo
             Box(
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 40.dp, bottomEnd = 40.dp))
+                    .size(85.dp)
+                    .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 42.dp, bottomEnd = 42.dp))
+                    .border(3.dp, CorAzulEscuro, RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 42.dp, bottomEnd = 42.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Column {
-                    Row {
-                        Box(modifier = Modifier.size(40.dp).background(CorAzulEscuro))
-                        Box(modifier = Modifier.size(40.dp).background(Color.White))
-                    }
-                    Row {
-                        Box(modifier = Modifier.size(40.dp).background(Color.White))
-                        Box(modifier = Modifier.size(40.dp).background(CorAzulEscuro))
+                // Escudo com 4 quadrantes
+                Box(
+                    modifier = Modifier
+                        .size(79.dp)
+                        .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 39.dp, bottomEnd = 39.dp))
+                ) {
+                    Column {
+                        Row {
+                            Box(modifier = Modifier.size(39.5.dp).background(CorAzulEscuro))
+                            Box(modifier = Modifier.size(39.5.dp).background(Color.White))
+                        }
+                        Row {
+                            Box(modifier = Modifier.size(39.5.dp).background(Color.White))
+                            Box(modifier = Modifier.size(39.5.dp).background(CorAzulEscuro))
+                        }
                     }
                 }
             }
@@ -344,95 +333,6 @@ fun BarraNavegacaoInferior(navController: NavController) {
             icon = { Icon(Icons.Default.Person, contentDescription = "Perfil") },
             label = { Text("Perfil") }
         )
-    }
-}
-
-// ================= TELA TERMOS DE USO =================
-@Composable
-fun TelaTermosUso(onAceitar: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(FundoGradiente)
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(40.dp))
-        LogoPinSafepoint()
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    "Termos de Uso e Política de Privacidade",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CorAzulEscuro
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text("Bem-vindo ao SafePoint!", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Ao utilizar nosso aplicativo, você concorda com os seguintes termos:",
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text("1. Coleta de Dados", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                Text(
-                    "Coletamos sua localização GPS para calcular rotas de evacuação seguras em tempo real. Seus dados de localização são processados de forma segura e não são compartilhados com terceiros.",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text("2. Uso do Aplicativo", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                Text(
-                    "O SafePoint é uma ferramenta de apoio em situações de emergência. Em caso de risco iminente, priorize sempre as orientações das autoridades locais.",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text("3. Privacidade", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                Text(
-                    "Seus dados pessoais (nome, e-mail, telefone) são armazenados de forma criptografada e utilizados apenas para melhorar sua experiência no aplicativo.",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text("4. Funcionalidade SOS", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                Text(
-                    "O botão SOS aciona os serviços de emergência (190, 192, 193) e compartilha sua localização com contatos de confiança previamente cadastrados.",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text("5. Cancelamento", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                Text(
-                    "Você pode solicitar a exclusão de seus dados a qualquer momento através da tela de Perfil ou entrando em contato com suporte@safepoint.com.",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        BotaoGradiente(texto = "Aceitar e Continuar") {
-            onAceitar()
-        }
-
-        Spacer(modifier = Modifier.height(40.dp))
     }
 }
 
@@ -1043,6 +943,7 @@ fun TelaMapa(navController: NavController) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 AndroidView(factory = { ctx ->
                     val mapView = MapView(ctx)
+                    // User-Agent já configurado no MainActivity (corrige erro 403)
                     mapView.setTileSource(TileSourceFactory.MAPNIK)
                     mapView.setMultiTouchControls(true)
                     mapView.controller.setZoom(15.0)
@@ -1131,7 +1032,8 @@ fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> U
 @Composable
 fun TelaHistorico(navController: NavController) {
     var textoPesquisa by remember { mutableStateOf("") }
-    var filtroSelecionado by remember { mutableStateOf("Todas") }
+    var filtroGravidade by remember { mutableStateOf("Todos") }
+    var filtroTipo by remember { mutableStateOf("Todos") }
     val context = LocalContext.current
     var localizacaoUsuario by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
@@ -1143,37 +1045,26 @@ fun TelaHistorico(navController: NavController) {
 
     val listaAlertas = remember {
         listOf(
-            AlertaRota("1", "Enchente Severa - Rio Doce", "15/08/2024, 14:30", "Rua Frei Caneca, 340 - Centro, São Paulo - SP", "Crítica", -23.5505, -46.6333),
-            AlertaRota("2", "Deslizamento de Terra - Morro da Cruz", "10/08/2024, 09:15", "Rua Pedro Álvares Cabral, 12 - Morro da Cruz, Porto Alegre - RS", "Alta", -30.0346, -51.2177),
-            AlertaRota("3", "Tempestade Tropical - Litoral Norte", "05/08/2024, 18:00", "Praia Grande - Ubatuba - SP", "Média", -23.4339, -45.0708),
-            AlertaRota("4", "Alerta de Inundação - Rio Tietê", "01/08/2024, 11:00", "Marginal Tietê - Ponte das Bandeiras, São Paulo - SP", "Alta", -23.5199, -46.6917)
+            AlertaRota("1", "Enchente Severa - Rio Doce", "15/08/2024, 14:30", "Rua Frei Caneca, 340 - Centro, São Paulo - SP", "Crítica", "Enchente", -23.5505, -46.6333),
+            AlertaRota("2", "Deslizamento de Terra - Morro da Cruz", "10/08/2024, 09:15", "Rua Pedro Álvares Cabral, 12 - Morro da Cruz, Porto Alegre - RS", "Alta", "Deslizamento", -30.0346, -51.2177),
+            AlertaRota("3", "Tempestade Tropical - Litoral Norte", "05/08/2024, 18:00", "Praia Grande - Ubatuba - SP", "Média", "Tempestade", -23.4339, -45.0708),
+            AlertaRota("4", "Alerta de Inundação - Rio Tietê", "01/08/2024, 11:00", "Marginal Tietê - Ponte das Bandeiras, São Paulo - SP", "Alta", "Enchente", -23.5199, -46.6917),
+            AlertaRota("5", "Terremoto Leve - Região Sul", "20/08/2024, 08:00", "Curitiba - PR", "Baixa", "Terremoto", -25.4284, -49.2733),
+            AlertaRota("6", "Incêndio Florestal - Serra Gaúcha", "18/08/2024, 16:00", "Canela - RS", "Crítica", "Incêndio", -29.3523, -51.1844)
         )
     }
 
-    val opcoesFiltro = listOf("Todas", "Críticas", "Próximas")
+    val opcoesGravidade = listOf("Todos", "Crítica", "Alta", "Média", "Baixa")
+    val opcoesTipo = listOf("Todos", "Enchente", "Deslizamento", "Tempestade", "Terremoto", "Incêndio")
 
     val alertasFiltrados = listaAlertas.filter { alerta ->
         val matchTexto = alerta.titulo.contains(textoPesquisa, ignoreCase = true) ||
                 alerta.localizacao.contains(textoPesquisa, ignoreCase = true)
 
-        val matchFiltro = when (filtroSelecionado) {
-            "Todas" -> true
-            "Críticas" -> alerta.gravidade == "Crítica"
-            "Próximas" -> {
-                if (localizacaoUsuario != null) {
-                    val distancia = calcularDistancia(
-                        localizacaoUsuario!!.first, localizacaoUsuario!!.second,
-                        alerta.latitude, alerta.longitude
-                    )
-                    distancia < 100
-                } else {
-                    true
-                }
-            }
-            else -> true
-        }
+        val matchGravidade = filtroGravidade == "Todos" || alerta.gravidade == filtroGravidade
+        val matchTipo = filtroTipo == "Todos" || alerta.tipo == filtroTipo
 
-        matchTexto && matchFiltro
+        matchTexto && matchGravidade && matchTipo
     }
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
@@ -1202,16 +1093,17 @@ fun TelaHistorico(navController: NavController) {
                 singleLine = true
             )
 
+            Text("Filtrar por gravidade:", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp))
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 16.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(opcoesFiltro) { filtro ->
+                items(opcoesGravidade) { filtro ->
                     FilterChip(
-                        selected = filtroSelecionado == filtro,
-                        onClick = { filtroSelecionado = filtro },
-                        label = { Text(filtro, fontSize = 13.sp) },
+                        selected = filtroGravidade == filtro,
+                        onClick = { filtroGravidade = filtro },
+                        label = { Text(filtro, fontSize = 12.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = CorAzulEscuro,
                             selectedLabelColor = Color.White
@@ -1220,7 +1112,26 @@ fun TelaHistorico(navController: NavController) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Text("Filtrar por tipo:", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp))
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(opcoesTipo) { filtro ->
+                    FilterChip(
+                        selected = filtroTipo == filtro,
+                        onClick = { filtroTipo = filtro },
+                        label = { Text(filtro, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = CorVerdeBotao,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -1247,7 +1158,9 @@ fun TelaHistorico(navController: NavController) {
                                 val corGravidade = when (alerta.gravidade) {
                                     "Crítica" -> Color(0xFFE53935)
                                     "Alta" -> Color(0xFFFF9800)
-                                    else -> Color(0xFF4CAF50)
+                                    "Média" -> Color(0xFFFFC107)
+                                    "Baixa" -> Color(0xFF4CAF50)
+                                    else -> Color.Gray
                                 }
                                 Box(
                                     modifier = Modifier
@@ -1263,7 +1176,9 @@ fun TelaHistorico(navController: NavController) {
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Tipo: ${alerta.tipo}", fontSize = 13.sp, color = CorAzulMedio, fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(alerta.localizacao, fontSize = 13.sp, color = Color.Gray)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(alerta.dataHora, fontSize = 12.sp, color = Color.Gray.copy(alpha = 0.7f))
@@ -1275,19 +1190,6 @@ fun TelaHistorico(navController: NavController) {
     }
 }
 
-// ================= FUNÇÃO DISTÂNCIA =================
-fun calcularDistancia(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val R = 6371
-    val dLat = Math.toRadians(lat2 - lat1)
-    val dLon = Math.toRadians(lon2 - lon1)
-    val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
-}
-
-// ================= TELA PERFIL EDITÁVEL =================
 @Composable
 fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFirestore) {
     val context = LocalContext.current
@@ -1295,34 +1197,65 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
     var email by remember { mutableStateOf("") }
     var telefone by remember { mutableStateOf("") }
     var dataNascimento by remember { mutableStateOf("") }
+    var fotoUri by remember { mutableStateOf<String?>(null) }
+    var mostrarDatePicker by remember { mutableStateOf(false) }
     var salvando by remember { mutableStateOf(false) }
     var carregando by remember { mutableStateOf(true) }
 
+    // Lançador para escolher imagem da galeria
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { fotoUri = it.toString() }
+    }
+
+    // Carregar dados ao abrir a tela
     LaunchedEffect(Unit) {
-        val userId = PrefsHelper.getUserId(context)
+        val userId = PrefsHelper.getUserId(context) ?: auth.currentUser?.uid
         if (userId != null) {
             db.collection("usuarios").document(userId).get()
                 .addOnSuccessListener { doc ->
                     nome = doc.getString("nome") ?: ""
-                    email = doc.getString("email") ?: (auth.currentUser?.email ?: "")
+                    email = doc.getString("email") ?: auth.currentUser?.email ?: ""
                     telefone = doc.getString("telefone") ?: ""
                     dataNascimento = doc.getString("dataNascimento") ?: ""
+                    fotoUri = doc.getString("fotoUri")
                     carregando = false
                 }
-                .addOnFailureListener {
-                    carregando = false
-                }
+                .addOnFailureListener { carregando = false }
         } else {
             carregando = false
         }
     }
 
+    // Diálogo do Calendário (DatePicker)
+    if (mostrarDatePicker) {
+        val calendar = Calendar.getInstance()
+        // Tenta preencher o calendário com a data já salva
+        if (dataNascimento.isNotBlank() && dataNascimento.contains("/")) {
+            val parts = dataNascimento.split("/")
+            if (parts.size == 3) {
+                calendar.set(Calendar.DAY_OF_MONTH, parts[0].toIntOrNull() ?: 1)
+                calendar.set(Calendar.MONTH, (parts[1].toIntOrNull() ?: 1) - 1)
+                calendar.set(Calendar.YEAR, parts[2].toIntOrNull() ?: 2000)
+            }
+        }
+
+        DatePickerDialog(
+            context,
+            { _: DatePicker, year: Int, month: Int, dayOfMonth: Int ->
+                dataNascimento = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
+                mostrarDatePicker = false
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
         if (carregando) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = CorAzulEscuro)
             }
         } else {
@@ -1333,6 +1266,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                     .background(Color.White)
                     .verticalScroll(rememberScrollState())
             ) {
+                // Cabeçalho com Foto
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1343,17 +1277,43 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(
                             modifier = Modifier
-                                .size(110.dp)
+                                .size(120.dp)
                                 .clip(CircleShape)
-                                .background(Color.White),
+                                .background(Color.White)
+                                .clickable { imagePickerLauncher.launch("image/*") },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.Person,
-                                contentDescription = "Perfil",
-                                tint = CorAzulEscuro,
-                                modifier = Modifier.size(70.dp)
-                            )
+                            if (!fotoUri.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = fotoUri,
+                                    contentDescription = "Foto de perfil",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = "Foto",
+                                    tint = CorAzulEscuro,
+                                    modifier = Modifier.size(70.dp)
+                                )
+                            }
+                            // Ícone de câmera
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(CorAzulMedio),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.PhotoCamera,
+                                    contentDescription = "Alterar foto",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
@@ -1363,9 +1323,15 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                             color = Color.White
                         )
                         Text(email, fontSize = 14.sp, color = Color.White.copy(alpha = 0.85f))
+                        Text(
+                            "Toque na foto para alterar",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
                     }
                 }
 
+                // Formulário de Edição
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1376,7 +1342,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         value = nome,
                         onValueChange = { nome = it },
                         label = { Text("Nome completo") },
-                        leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) },
+                        leadingIcon = { Icon(Icons.Outlined.Person, null, tint = CorAzulEscuro) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
@@ -1387,7 +1353,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         value = email,
                         onValueChange = { email = it },
                         label = { Text("E-mail") },
-                        leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null, tint = CorAzulEscuro) },
+                        leadingIcon = { Icon(Icons.Outlined.Email, null, tint = CorAzulEscuro) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
@@ -1398,7 +1364,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         value = telefone,
                         onValueChange = { telefone = it },
                         label = { Text("Telefone") },
-                        leadingIcon = { Icon(Icons.Outlined.Phone, contentDescription = null, tint = CorAzulEscuro) },
+                        leadingIcon = { Icon(Icons.Outlined.Phone, null, tint = CorAzulEscuro) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
@@ -1408,14 +1374,21 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
 
                     OutlinedTextField(
                         value = dataNascimento,
-                        onValueChange = { dataNascimento = it },
+                        onValueChange = {},
                         label = { Text("Data de nascimento") },
-                        leadingIcon = { Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = CorAzulEscuro) },
-                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = CorAzulEscuro) },
-                        modifier = Modifier.fillMaxWidth(),
+                        leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null, tint = CorAzulEscuro) },
+                        trailingIcon = {
+                            IconButton(onClick = { mostrarDatePicker = true }) {
+                                Icon(Icons.Default.ArrowDropDown, null, tint = CorAzulEscuro)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { mostrarDatePicker = true },
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
-                        singleLine = true
+                        singleLine = true,
+                        readOnly = true
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1424,13 +1397,14 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         if (salvando) return@BotaoGradiente
                         salvando = true
 
-                        val userId = PrefsHelper.getUserId(context)
+                        val userId = PrefsHelper.getUserId(context) ?: auth.currentUser?.uid
                         if (userId != null) {
                             val perfil = hashMapOf(
                                 "nome" to nome,
                                 "email" to email,
                                 "telefone" to telefone,
-                                "dataNascimento" to dataNascimento
+                                "dataNascimento" to dataNascimento,
+                                "fotoUri" to (fotoUri ?: "")
                             )
                             db.collection("usuarios").document(userId).set(perfil)
                                 .addOnSuccessListener {
@@ -1468,6 +1442,3 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
         }
     }
 }
-
-
-
