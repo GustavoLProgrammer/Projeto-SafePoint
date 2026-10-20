@@ -45,7 +45,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics:1.9.0")
     implementation("androidx.compose.ui:ui-tooling-preview:1.9.0")
     implementation("androidx.compose.material3:material3:1.3.2")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.material:material-icons-extended:1.6.1")
 
     implementation("com.google.firebase:firebase-auth-ktx:23.2.1")
     implementation("com.google.firebase:firebase-firestore-ktx:25.1.4")
@@ -70,7 +70,7 @@ dependencies {
     
     // ===== FIREBASE =====
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
-    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-auth:22.3.1")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
     
