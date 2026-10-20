@@ -27,6 +27,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import com.example.safepoint.ui.screens.MapaScreen
+import com.example.safepoint.ui.theme.SafepointTheme
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -124,6 +129,16 @@ fun LogoSafepoint() {
         }
 
         "HOME" -> {
+            TelaHomeSucesso(
+                modifier = modifier,
+                onSair = { telaAtual = "LOGIN" },
+                onIrParaMapa = { telaAtual = "MAP" }
+            )
+        }
+
+        "MAP" -> {
+            MapaScreen(onVoltar = { telaAtual = "HOME"})
+        }
             HomeScreen(
                 onAbrirSOS = { telaAtual = "SOS" },
                 onAbrirAjuda = { telaAtual = "AJUDA" }
@@ -176,6 +191,30 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }
     var senha by remember { mutableStateOf("") }
     var senhaVisivel by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val azulEscuro = Color(0xFF0F3E8A)
+    val azulLinhas = Color(0xFF1C8DF5)
+    val verdeGradiente = Color(0xFF1E9B44)
+    val cinzaTexto = Color(0xFF7A8B9E)
+    val cinzaBorda = Color(0xFFD6DFE8)
+    val textoDigitado = Color(0xFF1A1A1A)
+
+    val gradientFundo = Brush.linearGradient(
+        colors = listOf(Color(0xFF072B66), Color(0xFF0D52A0), Color(0xFF138A4B)),
+        start = Offset(0f, 0f),
+        end = Offset(1200f, 2200f)
+    )
+
+    val gradientBotao = Brush.horizontalGradient(
+        colors = listOf(azulEscuro, verdeGradiente)
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(gradientFundo)
+    ) {
     val context = navController.context
 
     Box(modifier = Modifier.fillMaxSize().background(AzulFundoGradiente), contentAlignment = Alignment.Center) {
@@ -259,6 +298,42 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
 }
 
 @Composable
+fun TelaHomeSucesso(
+    modifier: Modifier = Modifier,
+    onSair: () -> Unit,
+    onIrParaMapa: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF0F3E8A))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        LogoSafePoint(modifier = Modifier.size(120.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Bem-vindo ao SafePoint!", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Login efetuado com sucesso.", color = Color(0xFF1EA84C), fontSize = 16.sp)
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Button(
+            onClick = onIrParaMapa,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+            modifier = modifier.fillMaxWidth(0.6f)
+        ) {
+            Text("Ver Mapa", color = Color.White, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                FirebaseAuth.getInstance().signOut()
+                onSair()
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1EA84C))
 fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
     var nome by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
