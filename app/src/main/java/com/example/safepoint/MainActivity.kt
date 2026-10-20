@@ -1228,30 +1228,39 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
         }
     }
 
-    // Diálogo do Calendário (DatePicker)
-    if (mostrarDatePicker) {
-        val calendar = Calendar.getInstance()
-        // Tenta preencher o calendário com a data já salva
-        if (dataNascimento.isNotBlank() && dataNascimento.contains("/")) {
-            val parts = dataNascimento.split("/")
-            if (parts.size == 3) {
-                calendar.set(Calendar.DAY_OF_MONTH, parts[0].toIntOrNull() ?: 1)
-                calendar.set(Calendar.MONTH, (parts[1].toIntOrNull() ?: 1) - 1)
-                calendar.set(Calendar.YEAR, parts[2].toIntOrNull() ?: 2000)
+    // Diálogo do Calendário (DatePicker do Material 3 - Composable correto)
+if (mostrarDatePicker) {
+    val datePickerState = rememberDatePickerState()
+    
+    DatePickerDialog(
+        onDismissRequest = { mostrarDatePicker = false },
+        confirmButton = {
+            TextButton(onClick = {
+                val selectedDateMillis = datePickerState.selectedDateMillis
+                if (selectedDateMillis != null) {
+                    val calendar = Calendar.getInstance()
+                    calendar.timeInMillis = selectedDateMillis
+                    dataNascimento = String.format(
+                        "%02d/%02d/%04d",
+                        calendar.get(Calendar.DAY_OF_MONTH),
+                        calendar.get(Calendar.MONTH) + 1,
+                        calendar.get(Calendar.YEAR)
+                    )
+                }
+                mostrarDatePicker = false
+            }) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { mostrarDatePicker = false }) {
+                Text("Cancelar")
             }
         }
-
-        DatePickerDialog(
-            context,
-            { _: DatePicker, year: Int, month: Int, dayOfMonth: Int ->
-                dataNascimento = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
-                mostrarDatePicker = false
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        ).show()
+    ) {
+        DatePicker(state = datePickerState)
     }
+}
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
         if (carregando) {
