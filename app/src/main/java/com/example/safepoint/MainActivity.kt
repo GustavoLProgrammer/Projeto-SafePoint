@@ -2,7 +2,6 @@ package com.example.safepoint
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -16,7 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -87,14 +85,6 @@ data class AlertaRota(
     val longitude: Double
 )
 
-data class PerfilUsuario(
-    val nome: String = "",
-    val email: String = "",
-    val telefone: String = "",
-    val dataNascimento: String = "",
-    val fotoUri: String = ""
-)
-
 // ================= SCREENS =================
 sealed class Screen(val route: String) {
     object Termos : Screen("termos")
@@ -109,31 +99,27 @@ sealed class Screen(val route: String) {
     object Ajuda : Screen("ajuda")
 }
 
-// ================= HELPERS =================
+// ================= PREFS HELPER =================
 object PrefsHelper {
-    private const val PREFS_NAME = "safepoint_prefs"
-    private const val KEY_TERMOS_ACEITOS = "termos_aceitos"
-    private const val KEY_USER_ID = "user_id"
-
     fun getPrefs(context: Context): SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences("safepoint_prefs", Context.MODE_PRIVATE)
 
     fun isTermosAceitos(context: Context): Boolean =
-        getPrefs(context).getBoolean(KEY_TERMOS_ACEITOS, false)
+        getPrefs(context).getBoolean("termos_aceitos", false)
 
     fun setTermosAceitos(context: Context, aceito: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_TERMOS_ACEITOS, aceito).apply()
+        getPrefs(context).edit().putBoolean("termos_aceitos", aceito).apply()
     }
 
     fun getUserId(context: Context): String? =
-        getPrefs(context).getString(KEY_USER_ID, null)
+        getPrefs(context).getString("user_id", null)
 
     fun setUserId(context: Context, id: String) {
-        getPrefs(context).edit().putString(KEY_USER_ID, id).apply()
+        getPrefs(context).edit().putString("user_id", id).apply()
     }
 
     fun clearUserId(context: Context) {
-        getPrefs(context).edit().remove(KEY_USER_ID).apply()
+        getPrefs(context).edit().remove("user_id").apply()
     }
 }
 
@@ -147,7 +133,7 @@ class MainActivity : ComponentActivity() {
         auth = FirebaseAuth.getInstance()
         db = FirebaseFirestore.getInstance()
 
-        // CONFIGURAÇÃO CRÍTICA DO OSMDROID (corrige o erro 403)
+        // CORRIGE O ERRO 403 DO MAPA
         Configuration.getInstance().userAgentValue = packageName
         Configuration.getInstance().load(
             this,
@@ -204,7 +190,6 @@ class MainActivity : ComponentActivity() {
 fun LogoPinSafepoint() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
-            // Círculo verde externo
             Box(
                 modifier = Modifier
                     .size(90.dp)
@@ -213,7 +198,6 @@ fun LogoPinSafepoint() {
                     .border(3.dp, Color(0xFF1EA84C), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                // Círculo azul médio
                 Box(
                     modifier = Modifier
                         .size(65.dp)
@@ -221,7 +205,6 @@ fun LogoPinSafepoint() {
                         .background(CorAzulEscuro),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Ponto branco no centro
                     Box(
                         modifier = Modifier
                             .size(22.dp)
@@ -242,12 +225,11 @@ fun LogoPinSafepoint() {
     }
 }
 
-// ================= LOGO ESCUDO (para cadastro) =================
+// ================= LOGO ESCUDO =================
 @Composable
 fun LogoEscudoSafepoint() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(modifier = Modifier.size(100.dp), contentAlignment = Alignment.Center) {
-            // Escudo com 4 quadrantes
             Box(
                 modifier = Modifier
                     .size(80.dp)
@@ -454,7 +436,7 @@ fun TelaTermosUso(onAceitar: () -> Unit) {
     }
 }
 
-// ================= TELA LOGIN (exatamente como na imagem) =================
+// ================= TELA LOGIN =================
 @Composable
 fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }
@@ -501,9 +483,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
                     value = email,
                     onValueChange = { email = it },
                     placeholder = { Text("E-mail", color = Color.Gray) },
-                    leadingIcon = {
-                        Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro)
-                    },
+                    leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -518,9 +498,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
                     value = senha,
                     onValueChange = { senha = it },
                     placeholder = { Text("Senha", color = Color.Gray) },
-                    leadingIcon = {
-                        Icon(Icons.Outlined.Lock, contentDescription = null, tint = CorAzulEscuro)
-                    },
+                    leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, tint = CorAzulEscuro) },
                     trailingIcon = {
                         IconButton(onClick = { senhaVisivel = !senhaVisivel }) {
                             Icon(
@@ -589,7 +567,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
-// ================= TELA CADASTRO (exatamente como na imagem - fundo branco) =================
+// ================= TELA CADASTRO =================
 @Composable
 fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
     var nome by remember { mutableStateOf("") }
@@ -640,10 +618,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(14.dp))
@@ -655,10 +630,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null, tint = CorAzulEscuro) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(14.dp))
@@ -670,10 +642,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 leadingIcon = { Icon(Icons.Outlined.Phone, contentDescription = null, tint = CorAzulEscuro) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
             )
@@ -696,10 +665,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(14.dp))
@@ -721,10 +687,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 visualTransformation = if (confirmarSenhaVisivel) VisualTransformation.None else PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(14.dp))
@@ -737,10 +700,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = CorAzulEscuro) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(20.dp))
@@ -811,7 +771,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
-// ================= TELA RECUPERAR SENHA (exatamente como na imagem) =================
+// ================= TELA RECUPERAR SENHA =================
 @Composable
 fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }
@@ -858,10 +818,7 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
                     placeholder = { Text("E-mail", color = Color.Gray) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CorAzulEscuro,
-                        unfocusedBorderColor = Color(0xFFD6DFE8)
-                    ),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(28.dp))
@@ -883,7 +840,7 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
-// ================= TELA HOME (com nome do usuário) =================
+// ================= TELA HOME =================
 @Composable
 fun TelaHome(navController: NavController) {
     val context = LocalContext.current
@@ -1086,7 +1043,6 @@ fun TelaMapa(navController: NavController) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 AndroidView(factory = { ctx ->
                     val mapView = MapView(ctx)
-                    // User-Agent já configurado no MainActivity (corrige erro 403)
                     mapView.setTileSource(TileSourceFactory.MAPNIK)
                     mapView.setMultiTouchControls(true)
                     mapView.controller.setZoom(15.0)
@@ -1102,7 +1058,6 @@ fun TelaMapa(navController: NavController) {
                     markerAtual.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                     mapView.overlays.add(markerAtual)
 
-                    // Pontos de evacuação próximos (simulados)
                     val pontosEvacuacao = listOf(
                         GeoPoint(lat + 0.005, lng + 0.005),
                         GeoPoint(lat - 0.003, lng + 0.008),
@@ -1180,14 +1135,12 @@ fun TelaHistorico(navController: NavController) {
     val context = LocalContext.current
     var localizacaoUsuario by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
-    // Obter localização do usuário para filtrar alertas próximos
     LaunchedEffect(Unit) {
         obterLocalizacao(context) { lat, lng ->
             localizacaoUsuario = Pair(lat, lng)
         }
     }
 
-    // Lista de alertas com coordenadas reais
     val listaAlertas = remember {
         listOf(
             AlertaRota("1", "Enchente Severa - Rio Doce", "15/08/2024, 14:30", "Rua Frei Caneca, 340 - Centro, São Paulo - SP", "Crítica", -23.5505, -46.6333),
@@ -1197,9 +1150,8 @@ fun TelaHistorico(navController: NavController) {
         )
     }
 
-    val opcoesFiltro = listOf("Todas", "Hoje", "Esta semana", "Este mês", "Críticas", "Próximas")
+    val opcoesFiltro = listOf("Todas", "Críticas", "Próximas")
 
-    // Filtrar alertas
     val alertasFiltrados = listaAlertas.filter { alerta ->
         val matchTexto = alerta.titulo.contains(textoPesquisa, ignoreCase = true) ||
                 alerta.localizacao.contains(textoPesquisa, ignoreCase = true)
@@ -1213,7 +1165,7 @@ fun TelaHistorico(navController: NavController) {
                         localizacaoUsuario!!.first, localizacaoUsuario!!.second,
                         alerta.latitude, alerta.longitude
                     )
-                    distancia < 100 // km
+                    distancia < 100
                 } else {
                     true
                 }
@@ -1250,7 +1202,6 @@ fun TelaHistorico(navController: NavController) {
                 singleLine = true
             )
 
-            // Filtros horizontais
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 16.dp),
@@ -1324,9 +1275,9 @@ fun TelaHistorico(navController: NavController) {
     }
 }
 
-// Função para calcular distância entre dois pontos (em km)
+// ================= FUNÇÃO DISTÂNCIA =================
 fun calcularDistancia(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val R = 6371 // Raio da Terra em km
+    val R = 6371
     val dLat = Math.toRadians(lat2 - lat1)
     val dLon = Math.toRadians(lon2 - lon1)
     val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -1336,7 +1287,7 @@ fun calcularDistancia(lat1: Double, lon1: Double, lat2: Double, lon2: Double): D
     return R * c
 }
 
-// ================= TELA PERFIL COMPLETA (com edição funcional) =================
+// ================= TELA PERFIL EDITÁVEL =================
 @Composable
 fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFirestore) {
     val context = LocalContext.current
@@ -1382,7 +1333,6 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                     .background(Color.White)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Header com foto de perfil
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1429,10 +1379,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CorAzulEscuro,
-                            unfocusedBorderColor = Color(0xFFD6DFE8)
-                        ),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                         singleLine = true
                     )
 
@@ -1443,10 +1390,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null, tint = CorAzulEscuro) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CorAzulEscuro,
-                            unfocusedBorderColor = Color(0xFFD6DFE8)
-                        ),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                         singleLine = true
                     )
 
@@ -1457,10 +1401,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         leadingIcon = { Icon(Icons.Outlined.Phone, contentDescription = null, tint = CorAzulEscuro) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CorAzulEscuro,
-                            unfocusedBorderColor = Color(0xFFD6DFE8)
-                        ),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                     )
@@ -1473,10 +1414,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = CorAzulEscuro) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = CorAzulEscuro,
-                            unfocusedBorderColor = Color(0xFFD6DFE8)
-                        ),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                         singleLine = true
                     )
 
@@ -1530,4 +1468,6 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
         }
     }
 }
-}
+
+
+
