@@ -19,8 +19,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -30,7 +32,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.example.safepoint.ui.screens.MapaScreen
 import com.example.safepoint.ui.theme.SafepointTheme
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -38,6 +39,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import com.example.safepoint.ui.screens.EditarPerfilScreen
+
 
 data class AlertaRota(
     val id: String,
@@ -55,6 +57,7 @@ sealed class Screen(val route: String) {
     object Historico : Screen("historico")
     object Perfil : Screen("perfil")
 }
+
 
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
@@ -108,54 +111,7 @@ fun LogoSafepoint() {
     }
 }
 
-   when (telaAtual) {
-        "LOGIN" -> {
-            TelaLogin(
-                modifier = modifier,
-                onIrParaCadastro = { telaAtual = "CADASTRO" },
-                onLoginSucesso = { telaAtual = "HOME" },
-                usuarios = usuariosCadastrados
-            )
-        }
 
-        "CADASTRO" -> {
-            CadastroScreen(
-                onVoltarParaLogin = { telaAtual = "LOGIN" },
-                onCadastroSucesso = { email, senha ->
-                    usuariosCadastrados[email] = senha
-                    telaAtual = "LOGIN"
-                }
-            )
-        }
-
-        "HOME" -> {
-            TelaHomeSucesso(
-                modifier = modifier,
-                onSair = { telaAtual = "LOGIN" },
-                onIrParaMapa = { telaAtual = "MAP" }
-            )
-        }
-
-        "MAP" -> {
-            MapaScreen(onVoltar = { telaAtual = "HOME"})
-        }
-            HomeScreen(
-                onAbrirSOS = { telaAtual = "SOS" },
-                onAbrirAjuda = { telaAtual = "AJUDA" }
-            )
-        }
-
-        "SOS" -> {
-            TelaSOS(
-                onVoltar = { telaAtual = "HOME" }
-            )
-        }
-
-        "AJUDA" -> {
-            TelaAjuda(
-                onVoltar = { telaAtual = "HOME" }
-            )
-        }
 @Composable
 fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
     NavigationBar(containerColor = Color.White) {
@@ -186,36 +142,13 @@ fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
     }
 }
 
+
 @Composable
 fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }
     var senha by remember { mutableStateOf("") }
     var senhaVisivel by remember { mutableStateOf(false) }
     val context = LocalContext.current
-
-    val azulEscuro = Color(0xFF0F3E8A)
-    val azulLinhas = Color(0xFF1C8DF5)
-    val verdeGradiente = Color(0xFF1E9B44)
-    val cinzaTexto = Color(0xFF7A8B9E)
-    val cinzaBorda = Color(0xFFD6DFE8)
-    val textoDigitado = Color(0xFF1A1A1A)
-
-    val gradientFundo = Brush.linearGradient(
-        colors = listOf(Color(0xFF072B66), Color(0xFF0D52A0), Color(0xFF138A4B)),
-        start = Offset(0f, 0f),
-        end = Offset(1200f, 2200f)
-    )
-
-    val gradientBotao = Brush.horizontalGradient(
-        colors = listOf(azulEscuro, verdeGradiente)
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(gradientFundo)
-    ) {
-    val context = navController.context
 
     Box(modifier = Modifier.fillMaxSize().background(AzulFundoGradiente), contentAlignment = Alignment.Center) {
         Card(
@@ -298,42 +231,6 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
 }
 
 @Composable
-fun TelaHomeSucesso(
-    modifier: Modifier = Modifier,
-    onSair: () -> Unit,
-    onIrParaMapa: () -> Unit
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF0F3E8A))
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        LogoSafePoint(modifier = Modifier.size(120.dp))
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Bem-vindo ao SafePoint!", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Login efetuado com sucesso.", color = Color(0xFF1EA84C), fontSize = 16.sp)
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Button(
-            onClick = onIrParaMapa,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
-            modifier = modifier.fillMaxWidth(0.6f)
-        ) {
-            Text("Ver Mapa", color = Color.White, fontWeight = FontWeight.Bold)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                FirebaseAuth.getInstance().signOut()
-                onSair()
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1EA84C))
 fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
     var nome by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -401,6 +298,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
+
 @Composable
 fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }
@@ -444,6 +342,7 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
+
 @Composable
 fun TelaHome(navController: NavController) {
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Início") }) { paddingValues ->
@@ -458,6 +357,7 @@ fun TelaHome(navController: NavController) {
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -482,6 +382,3 @@ fun TelaHistoricoSafepoint(navController: NavController) {
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Histórico") }) { paddingValues ->
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFF6F8FA)).padding(horizontal = 16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageV
