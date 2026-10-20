@@ -1,5 +1,8 @@
 package com.example.safepoint
 
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
