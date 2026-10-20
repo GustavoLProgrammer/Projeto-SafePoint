@@ -1,8 +1,5 @@
 package com.example.safepoint
 
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -13,6 +10,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -94,14 +94,15 @@ val CorAzulEscuro = Color(0xFF1B3B6F)
 val CorVerdeBotao = Brush.horizontalGradient(listOf(Color(0xFF13509E), Color(0xFF1B8C48)))
 
 @Composable
-fun LogoSafepointExato() {
+fun LogoSafepointOriginal() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-            Icon(imageVector = Icons.Default.LocationOn, contentDescription = "Logo", tint = CorAzulEscuro, modifier = Modifier.size(56.dp))
+        Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+            Icon(imageVector = Icons.Default.Security, contentDescription = "Logo", tint = CorAzulEscuro, modifier = Modifier.size(64.dp))
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(text = "SAFEPOINT", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro, letterSpacing = 2.sp)
         Text(text = "Sempre te guiando a um ponto seguro", fontSize = 11.sp, color = Color.Gray)
+        Text(text = "SISTEMA INTELIGENTE DE SEGURANÇA E EVACUAÇÃO", fontSize = 8.sp, color = Color.Gray, letterSpacing = 0.5.sp)
     }
 }
 
@@ -150,8 +151,8 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
             modifier = Modifier.fillMaxWidth().padding(24.dp)
         ) {
             Column(modifier = Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                LogoSafepointExato()
-                Spacer(modifier = Modifier.height(20.dp))
+                LogoSafepointOriginal()
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "Faça seu login", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -183,7 +184,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = lembrarMe, onCheckedChange = { lembrarMe = it })
@@ -194,7 +195,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Button(
                     onClick = {
@@ -210,7 +211,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
                             Toast.makeText(context, "Preencha todos os campos", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
@@ -219,7 +220,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 TextButton(onClick = { navController.navigate(Screen.Cadastro.route) }) {
                     Text("Não tem uma conta? ", color = Color.Gray, fontSize = 13.sp)
@@ -248,7 +249,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
             colors = CardDefaults.cardColors(containerColor = Color.White),
             modifier = Modifier.fillMaxWidth().padding(16.dp)
         ) {
-            Column(modifier = Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(modifier = Modifier.padding(18.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 TextButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.Start)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = CorAzulEscuro)
@@ -256,31 +257,31 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                         Text("Voltar", color = CorAzulEscuro, fontWeight = FontWeight.Bold)
                     }
                 }
-                LogoSafepointExato()
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "Crie sua conta", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                Text(text = "Preencha os dados abaixo para se cadastrar", fontSize = 11.sp, color = Color.Gray)
-                Spacer(modifier = Modifier.height(12.dp))
+                LogoSafepointOriginal()
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(text = "Crie sua conta", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                Text(text = "Preencha os dados abaixo para se cadastrar", fontSize = 10.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(10.dp))
 
-                OutlinedTextField(value = nome, onValueChange = { nome = it }, placeholder = { Text("Nome completo") }, leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = email, onValueChange = { email = it }, placeholder = { Text("E-mail") }, leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = telefone, onValueChange = { telefone = it }, placeholder = { Text("Telefone / Celular") }, leadingIcon = { Icon(Icons.Outlined.Phone, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = senha, onValueChange = { senha = it }, placeholder = { Text("Senha") }, leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, tint = CorAzulEscuro) }, trailingIcon = { IconButton(onClick = { senhaVisivel = !senhaVisivel }) { Icon(if (senhaVisivel) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null, tint = Color.Gray) } }, visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = confirmarSenha, onValueChange = { confirmarSenha = it }, placeholder = { Text("Confirmar senha") }, leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, tint = CorAzulEscuro) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = dataNascimento, onValueChange = { dataNascimento = it }, placeholder = { Text("Data de nascimento") }, leadingIcon = { Icon(Icons.Outlined.DateRange, contentDescription = null, tint = CorAzulEscuro) }, trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
+                OutlinedTextField(value = nome, onValueChange = { nome = it }, placeholder = { Text("Nome completo") }, leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(value = email, onValueChange = { email = it }, placeholder = { Text("E-mail") }, leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(value = telefone, onValueChange = { telefone = it }, placeholder = { Text("Telefone / Celular") }, leadingIcon = { Icon(Icons.Outlined.Phone, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(value = senha, onValueChange = { senha = it }, placeholder = { Text("Senha") }, leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, tint = CorAzulEscuro) }, trailingIcon = { IconButton(onClick = { senhaVisivel = !senhaVisivel }) { Icon(if (senhaVisivel) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = null, tint = Color.Gray) } }, visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(value = confirmarSenha, onValueChange = { confirmarSenha = it }, placeholder = { Text("Confirmar senha") }, leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, tint = CorAzulEscuro) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(value = dataNascimento, onValueChange = { dataNascimento = it }, placeholder = { Text("Data de nascimento") }, leadingIcon = { Icon(Icons.Outlined.DateRange, contentDescription = null, tint = CorAzulEscuro) }, trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp), singleLine = true)
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Checkbox(checked = termosAceitos, onCheckedChange = { termosAceitos = it })
-                    Text(text = "Eu li e concordo com os Termos de Uso e a Política de Privacidade.", fontSize = 9.5.sp, color = Color.Gray)
+                    Text(text = "Eu li e concordo com os Termos de Uso e a Política de Privacidade.", fontSize = 9.sp, color = Color.Gray)
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
@@ -297,19 +298,19 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                             Toast.makeText(context, "Preencha todos os campos e aceite os termos", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
                     Box(modifier = Modifier.fillMaxSize().background(CorVerdeBotao), contentAlignment = Alignment.Center) {
-                        Text("Cadastrar", fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Cadastrar", fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 TextButton(onClick = { navController.popBackStack() }) {
-                    Text("Já tem uma conta? ", color = Color.Gray, fontSize = 13.sp)
-                    Text("Fazer login", color = Color(0xFF1976D2), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("Já tem uma conta? ", color = Color.Gray, fontSize = 12.sp)
+                    Text("Fazer login", color = Color(0xFF1976D2), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -327,7 +328,7 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
                 TextButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.Start)) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = CorAzulEscuro)
                 }
-                LogoSafepointExato()
+                LogoSafepointOriginal()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "Recuperar senha", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -348,7 +349,7 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
                             }
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
                 ) {
@@ -369,7 +370,7 @@ fun TelaHome(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(imageVector = Icons.Default.Shield, contentDescription = null, tint = Color(0xFF1E88E5), modifier = Modifier.size(64.dp))
+            Icon(imageVector = Icons.Default.Security, contentDescription = null, tint = CorAzulEscuro, modifier = Modifier.size(72.dp))
             Spacer(modifier = Modifier.height(16.dp))
             Text(text = "Bem-vindo ao Safepoint!", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
             Spacer(modifier = Modifier.height(8.dp))
@@ -380,26 +381,39 @@ fun TelaHome(navController: NavController) {
 
 @Composable
 fun TelaMapaSafepoint(navController: NavController) {
+    val context = LocalContext.current
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Mapa") }) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            Card(
-                modifier = Modifier.fillMaxSize().padding(12.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFE3F2FD))) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(imageVector = Icons.Default.Map, contentDescription = null, tint = Color(0xFF1976D2), modifier = Modifier.size(72.dp))
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(imageVector = Icons.Default.Map, contentDescription = null, tint = Color(0xFF1976D2), modifier = Modifier.size(64.dp))
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(text = "Mapa Interativo de Evacuação", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(text = "GPS Ativo: Rota Segura Calculada", fontSize = 13.sp, color = Color.DarkGray)
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(text = "Mapa Interativo de Evacuação", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "GPS Ativo: Rota Segura Calculada com Sucesso", fontSize = 13.sp, color = Color.DarkGray, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(20.dp))
                         Button(
-                            onClick = { Toast.makeText(navController.context, "Navegando para o ponto seguro...", Toast.LENGTH_SHORT).show() },
+                            onClick = { Toast.makeText(context, "Calculando a melhor rota de fuga segura...", Toast.LENGTH_SHORT).show() },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = CorAzulEscuro)
                         ) {
-                            Text("Iniciar Rota de Fuga", color = Color.White)
+                            Icon(Icons.Default.Navigation, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Iniciar Rota de Fuga", color = Color.White, fontSize = 15.sp)
                         }
                     }
                 }
@@ -606,9 +620,9 @@ fun TelaEditarPerfil(navController: NavController, auth: FirebaseAuth) {
                                     navController.popBackStack()
                                 }
                                 .addOnFailureListener { e ->
-                                    Toast.makeText(context, "Erro ao salvar: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Erro ao salvar (verifique as regras do Firestore): ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                                 }
-                        }
+                        } ?: Toast.makeText(context, "Usuário não autenticado", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
