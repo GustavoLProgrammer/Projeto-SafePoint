@@ -19,7 +19,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -29,17 +28,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import com.example.safepoint.ui.theme.SafepointTheme
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
-import com.example.safepoint.ui.screens.EditarPerfilScreen
-
+import com.google.firebase.firestore.FirebaseFirestore
 
 data class AlertaRota(
     val id: String,
@@ -54,10 +48,10 @@ sealed class Screen(val route: String) {
     object Cadastro : Screen("cadastro")
     object RecuperarSenha : Screen("recuperar_senha")
     object Home : Screen("home")
+    object Mapa : Screen("mapa")
     object Historico : Screen("historico")
     object Perfil : Screen("perfil")
 }
-
 
 class MainActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
@@ -77,16 +71,9 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Cadastro.route) { TelaCadastro(navController, auth) }
                     composable(Screen.RecuperarSenha.route) { TelaRecuperarSenha(navController, auth) }
                     composable(Screen.Home.route) { TelaHome(navController) }
+                    composable(Screen.Mapa.route) { TelaMapaSafepoint(navController) }
                     composable(Screen.Historico.route) { TelaHistoricoSafepoint(navController) }
-                    composable(Screen.Perfil.route) {
-                        EditarPerfilScreen(
-                            onVoltar = { navController.popBackStack() },
-                            onSalvar = { _, _, _, _ ->
-                                Toast.makeText(applicationContext, "Perfil salvo com sucesso!", Toast.LENGTH_SHORT).show()
-                                navController.popBackStack()
-                            }
-                        )
-                    }
+                    composable(Screen.Perfil.route) { TelaEditarPerfil(navController, auth) }
                 }
             }
         }
@@ -111,19 +98,18 @@ fun LogoSafepoint() {
     }
 }
 
-
 @Composable
 fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
     NavigationBar(containerColor = Color.White) {
         NavigationBarItem(
             selected = abaAtual == "Início",
-            onClick = { navController.navigate(Screen.Home.route) },
+            onClick = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Home.route) { inclusive = true } } },
             icon = { Icon(Icons.Default.Home, contentDescription = "Início") },
             label = { Text("Início") }
         )
         NavigationBarItem(
             selected = abaAtual == "Mapa",
-            onClick = { },
+            onClick = { navController.navigate(Screen.Mapa.route) },
             icon = { Icon(Icons.Default.Map, contentDescription = "Mapa") },
             label = { Text("Mapa") }
         )
@@ -141,7 +127,6 @@ fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
         )
     }
 }
-
 
 @Composable
 fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
@@ -298,7 +283,6 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
-
 @Composable
 fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }
@@ -342,7 +326,6 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
-
 @Composable
 fun TelaHome(navController: NavController) {
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Início") }) { paddingValues ->
@@ -358,6 +341,40 @@ fun TelaHome(navController: NavController) {
     }
 }
 
+@Composable
+fun TelaMapaSafepoint(navController: NavController) {
+    Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Mapa") }) { paddingValues ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFF6F8FA)).padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "Mapa de Alertas & Evacuação", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                IconButton(onClick = {}) { Icon(Icons.Default.MyLocation, contentDescription = "Localização Atual", tint = CorAzulEscuro) }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(imageVector = Icons.Default.Map, contentDescription = null, tint = Color(0xFF1976D2), modifier = Modifier.size(64.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = "GPS Ativo: Região Metropolitana", fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "3 Pontos seguros próximos identificados", fontSize = 12.sp, color = Color.DarkGray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { Toast.makeText(navController.context, "Traçando rota para o ponto seguro mais próximo...", Toast.LENGTH_SHORT).show() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))) {
+                            Text("Iniciar Rota Segura", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -451,3 +468,92 @@ fun TelaHistoricoSafepoint(navController: NavController) {
         }
     }
 }
+
+@Composable
+fun TelaEditarPerfil(navController: NavController, auth: FirebaseAuth) {
+    val context = navController.context
+    val currentUser = auth.currentUser
+    val db = FirebaseFirestore.getInstance()
+
+    var nome by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(currentUser?.email ?: "") }
+    var telefone by remember { mutableStateOf("") }
+    var dataNascimento by remember { mutableStateOf("01/01/2000") }
+
+    LaunchedEffect(currentUser) {
+        currentUser?.uid?.let { uid ->
+            db.collection("usuarios").document(uid).get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        nome = document.getString("nome") ?: ""
+                        telefone = document.getString("telefone") ?: ""
+                        dataNascimento = document.getString("dataNascimento") ?: "01/01/2000"
+                    }
+                }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(AzulFundoGradiente), contentAlignment = Alignment.Center) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                TextButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.Start)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = CorAzulEscuro)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Voltar", color = CorAzulEscuro)
+                    }
+                }
+
+                Text(text = "Editar Perfil", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Box(modifier = Modifier.size(80.dp).background(Color(0xFFE0E0E0), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = CorAzulEscuro, modifier = Modifier.size(40.dp))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(value = nome, onValueChange = { nome = it }, placeholder = { Text("Nome Sobrenome") }, leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = email, onValueChange = { email = it }, enabled = false, placeholder = { Text("exemplo@email.com") }, leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = telefone, onValueChange = { telefone = it }, placeholder = { Text("(00) 00000-0000") }, leadingIcon = { Icon(Icons.Outlined.Phone, contentDescription = null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = dataNascimento, onValueChange = { dataNascimento = it }, placeholder = { Text("01/01/2000") }, leadingIcon = { Icon(Icons.Outlined.DateRange, contentDescription = null, tint = CorAzulEscuro) }, trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true)
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = {
+                        currentUser?.uid?.let { uid ->
+                            val dadosUsuario = hashMapOf(
+                                "nome" to nome,
+                                "email" to email,
+                                "telefone" to telefone,
+                                "dataNascimento" to dataNascimento
+                            )
+                            db.collection("usuarios").document(uid).set(dadosUsuario)
+                                .addOnSuccessListener {
+                                    Toast.makeText(context, "Alterações salvas com sucesso!", Toast.LENGTH_SHORT).show()
+                                    navController.popBackStack()
+                                }
+                                .addOnFailureListener { e ->
+                                    Toast.makeText(context, "Erro ao salvar: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = CorVerdeBotao)
+                ) {
+                    Text("Salvar Alterações", fontSize = 16.sp, color = Color.White)
+                }
+            }
+        }
+    }
+}
+
