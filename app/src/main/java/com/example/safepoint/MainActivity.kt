@@ -5,7 +5,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -75,7 +74,7 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Perfil.route) {
                         EditarPerfilScreen(
                             onVoltar = { navController.popBackStack() },
-                            onSalvar = { nome, email, telefone, dataNascimento ->
+                            onSalvar = { _, _, _, _ ->
                                 Toast.makeText(applicationContext, "Perfil salvo com sucesso!", Toast.LENGTH_SHORT).show()
                                 navController.popBackStack()
                             }
@@ -96,16 +95,8 @@ val CorVerdeBotao = Color(0xFF1E8C48)
 @Composable
 fun LogoSafepoint() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier.size(64.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Shield,
-                contentDescription = "Logo",
-                tint = Color(0xFF1E88E5),
-                modifier = Modifier.size(64.dp)
-            )
+        Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+            Icon(imageVector = Icons.Default.Shield, contentDescription = "Logo", tint = Color(0xFF1E88E5), modifier = Modifier.size(64.dp))
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "SAFEPOINT", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro, letterSpacing = 2.sp)
@@ -127,10 +118,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
             colors = CardDefaults.cardColors(containerColor = Color.White),
             modifier = Modifier.fillMaxWidth().padding(24.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(modifier = Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 LogoSafepoint()
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(text = "Faça seu login", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
@@ -221,10 +209,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
             colors = CardDefaults.cardColors(containerColor = Color.White),
             modifier = Modifier.fillMaxWidth().padding(24.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(modifier = Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 TextButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.Start)) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = CorAzulEscuro)
                 }
@@ -369,4 +354,16 @@ fun TelaHistoricoSafepoint(navController: NavController) {
                 IconButton(onClick = {}) { Icon(imageVector = Icons.Default.Notifications, contentDescription = "Notificações", tint = CorAzulEscuro) }
             }
 
-            Text(text = "Histórico de Rotas", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro, modifier = Modifier.align
+            Text(
+                text = "Histórico de Rotas",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = CorAzulEscuro,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(vertical = 8.dp)
+            )
+
+            OutlinedTextField(
+                value = textoPesquisa,
+            
