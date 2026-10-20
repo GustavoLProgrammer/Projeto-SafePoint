@@ -382,3 +382,72 @@ fun TelaHistoricoSafepoint(navController: NavController) {
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Histórico") }) { paddingValues ->
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFF6F8FA)).padding(horizontal = 16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.DateRange, contentDescription = null, tint = CorAzulEscuro)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Histórico de Alertas", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                }
+            }
+
+            OutlinedTextField(
+                value = textoPesquisa,
+                onValueChange = { textoPesquisa = it },
+                placeholder = { Text("Pesquisar alertas") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(opcoesFiltro) { opcao ->
+                    FilterChip(
+                        selected = filtroSelecionado == opcao,
+                        onClick = { filtroSelecionado = opcao },
+                        label = { Text(opcao) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(alertasFiltrados) { alerta ->
+                    val corGravidade = when (alerta.gravidade) {
+                        "Crítica" -> Color(0xFFD32F2F)
+                        "Alta" -> Color(0xFFF57C00)
+                        else -> Color(0xFFFBC02D)
+                    }
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(alerta.titulo, fontWeight = FontWeight.Bold, color = CorAzulEscuro, fontSize = 16.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(alerta.dataHora, color = Color.Gray, fontSize = 12.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(alerta.localizacao, color = Color.DarkGray, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(corGravidade, RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(alerta.gravidade, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
