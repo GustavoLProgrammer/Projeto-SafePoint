@@ -47,7 +47,6 @@ sealed class Screen(val route: String) {
     object Cadastro : Screen("cadastro")
     object RecuperarSenha : Screen("recuperar_senha")
     object Home : Screen("home")
-    object Mapa : Screen("mapa")
     object Historico : Screen("historico")
     object Perfil : Screen("perfil")
 }
@@ -101,6 +100,37 @@ fun LogoSafepoint() {
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "SAFEPOINT", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro, letterSpacing = 2.sp)
         Text(text = "Sempre te guiando a um ponto seguro", fontSize = 12.sp, color = Color.Gray)
+    }
+}
+
+// ================= BARRA DE NAVEGAÇÃO INFERIOR =================
+@Composable
+fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
+    NavigationBar(containerColor = Color.White) {
+        NavigationBarItem(
+            selected = abaAtual == "Início",
+            onClick = { navController.navigate(Screen.Home.route) },
+            icon = { Icon(Icons.Default.Home, contentDescription = "Início") },
+            label = { Text("Início") }
+        )
+        NavigationBarItem(
+            selected = abaAtual == "Mapa",
+            onClick = { /* Mapa */ },
+            icon = { Icon(Icons.Default.Map, contentDescription = "Mapa") },
+            label = { Text("Mapa") }
+        )
+        NavigationBarItem(
+            selected = abaAtual == "Histórico",
+            onClick = { navController.navigate(Screen.Historico.route) },
+            icon = { Icon(Icons.Default.DateRange, contentDescription = "Histórico") },
+            label = { Text("Histórico") }
+        )
+        NavigationBarItem(
+            selected = abaAtual == "Perfil",
+            onClick = { navController.navigate(Screen.Perfil.route) },
+            icon = { Icon(Icons.Default.Person, contentDescription = "Perfil") },
+            label = { Text("Perfil") }
+        )
     }
 }
 
@@ -344,26 +374,4 @@ fun TelaHistoricoSafepoint(navController: NavController) {
     val opcoesFiltro = listOf("Todas", "Hoje", "Esta semana", "Este mês", "Período")
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Histórico") }) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFF6F8FA)).padding(horizontal = 16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Shield, contentDescription = "Logo", tint = Color(0xFF1E88E5), modifier = Modifier.size(32.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Safepoint", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                }
-                IconButton(onClick = {}) { Icon(imageVector = Icons.Default.Notifications, contentDescription = "Notificações", tint = CorAzulEscuro) }
-            }
-
-            Text(
-                text = "Histórico de Rotas",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = CorAzulEscuro,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 8.dp)
-            )
-
-            OutlinedTextField(
-                value = textoPesquisa,
-            
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues).
