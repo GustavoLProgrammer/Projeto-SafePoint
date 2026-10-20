@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -99,31 +100,32 @@ val CorAzulEscuro = Color(0xFF1B3B6F)
 val CorVerdeBotao = Brush.horizontalGradient(listOf(Color(0xFF13509E), Color(0xFF1B8C48)))
 
 @Composable
-fun LogoSafepointExatoMockup() {
+fun LogoSafepointMockupExato() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
-            // Desenho exato do escudo com o pin interno idêntico ao mockup
+        // Logo vetorizada idêntica ao design original (Escudo com marcador e tom verde)
+        Box(modifier = Modifier.size(68.dp), contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.size(68.dp)) {
+                val width = size.width
+                val height = size.height
+                // Contorno externo do escudo em verde/azul
+                drawCircle(
+                    color = Color(0xFF1B8C48).copy(alpha = 0.2f),
+                    radius = width / 2f,
+                    center = Offset(width / 2f, height / 2f)
+                )
+            }
             Box(
                 modifier = Modifier
-                    .size(60.dp)
-                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 30.dp, bottomEnd = 30.dp))
-                    .background(Color(0xFFE8F5E9)),
+                    .size(52.dp)
+                    .background(Color(0xFFE8F5E9), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 24.dp, bottomEnd = 24.dp))
-                        .background(Color.White),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = "Pin",
-                        tint = CorAzulEscuro,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = "Logo",
+                    tint = CorAzulEscuro,
+                    modifier = Modifier.size(34.dp)
+                )
             }
         }
         Spacer(modifier = Modifier.height(2.dp))
@@ -177,7 +179,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
             modifier = Modifier.fillMaxWidth().padding(24.dp)
         ) {
             Column(modifier = Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                LogoSafepointExatoMockup()
+                LogoSafepointMockupExato()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "Faça seu login", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
                 Spacer(modifier = Modifier.height(16.dp))
@@ -283,7 +285,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                         Text("Voltar", color = CorAzulEscuro, fontWeight = FontWeight.Bold)
                     }
                 }
-                LogoSafepointExatoMockup()
+                LogoSafepointMockupExato()
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = "Crie sua conta", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
                 Text(text = "Preencha os dados abaixo para se cadastrar", fontSize = 10.sp, color = Color.Gray)
@@ -354,7 +356,7 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
                 TextButton(onClick = { navController.popBackStack() }, modifier = Modifier.align(Alignment.Start)) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = CorAzulEscuro)
                 }
-                LogoSafepointExatoMockup()
+                LogoSafepointMockupExato()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(text = "Recuperar senha", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -408,42 +410,37 @@ fun TelaHome(navController: NavController) {
 @Composable
 fun TelaMapaSafepoint(navController: NavController) {
     val context = LocalContext.current
-    var temPermissaoLocalizacao by remember {
+    var temPermissao by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         )
     }
 
-    val launcherPermissao = rememberLauncherForActivityResult(
+    val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { concedida ->
-        temPermissaoLocalizacao = concedida
+        temPermissao = concedida
         if (concedida) {
-            Toast.makeText(context, "Localização ativada! Carregando pontos seguros...", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(context, "Permissão de localização negada.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "GPS Conectado com sucesso!", Toast.LENGTH_SHORT).show()
         }
     }
 
-    Scaffold(
-        bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Mapa") }
-    ) { paddingValues ->
+    Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Mapa") }) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            if (!temPermissaoLocalizacao) {
-                // Tela solicitando permissão de localização ao usuário
+            if (!temPermissao) {
                 Column(
-                    modifier = Modifier.fillMaxSize().background(Color(0xFFF0F4F8)).padding(24.dp),
+                    modifier = Modifier.fillMaxSize().background(Color(0xFFF4F6F9)).padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Icon(Icons.Default.LocationOn, contentDescription = null, tint = CorAzulEscuro, modifier = Modifier.size(64.dp))
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = "Permissão de Localização", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro, textAlign = TextAlign.Center)
+                    Text(text = "Acesso à Localização Necessário", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro, textAlign = TextAlign.Center)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = "Para exibir o mapa de evacuação e calcular rotas seguras em tempo real, precisamos acessar sua localização.", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center)
+                    Text(text = "Para carregar o mapa interativo de evacuação em tempo real, permita o acesso à sua localização.", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center)
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
-                        onClick = { launcherPermissao.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                        onClick = { launcher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = CorAzulEscuro)
@@ -452,73 +449,74 @@ fun TelaMapaSafepoint(navController: NavController) {
                     }
                 }
             } else {
-                // Mapa interativo com pontos seguros e simulação de radar/grade de rota
-                Box(modifier = Modifier.fillMaxSize().background(Color(0xFFE8F4F8))) {
+                // Mapa interativo com grade, simulação de marcadores de pontos seguros e rota
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xFFE3F2FD))) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        val canvasWidth = size.width
-                        val canvasHeight = size.height
-
-                        // Desenhar linhas de grade do radar/mapa
-                        for (i in 1..8) {
-                            drawLine(
-                                color = Color(0xFFB0BEC5),
-                                start = Offset(0f, i * (canvasHeight / 9)),
-                                end = Offset(canvasWidth, i * (canvasHeight / 9)),
-                                strokeWidth = 1f
-                            )
-                            drawLine(
-                                color = Color(0xFFB0BEC5),
-                                start = Offset(i * (canvasWidth / 9), 0f),
-                                end = Offset(i * (canvasWidth / 9), canvasHeight),
-                                strokeWidth = 1f
-                            )
+                        val w = size.width
+                        val h = size.height
+                        // Linhas de grade do mapa simulado
+                        for (i in 1..10) {
+                            drawLine(Color(0xFFBBDEFB), Offset(0f, i * (h / 11)), Offset(w, i * (h / 11)), 1.5f)
+                            drawLine(Color(0xFFBBDEFB), Offset(i * (w / 11), 0f), Offset(i * (w / 11), h), 1.5f)
                         }
                     }
 
-                    // Elementos visuais interativos sobre o mapa
+                    // Marcadores interativos de pontos seguros no mapa
                     Column(
                         modifier = Modifier.fillMaxSize().padding(16.dp),
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Card(
                             shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f)),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(4.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFF1B8C48))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
-                                    Text("GPS Ativo & Sincronizado", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = CorAzulEscuro)
-                                    Text("3 Pontos seguros próximos identificados", fontSize = 11.sp, color = Color.Gray)
+                                    Text("GPS Ativo • Rota Segura Calculada", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = CorAzulEscuro)
+                                    Text("2 Pontos de Evacuação abertos na região", fontSize = 11.sp, color = Color.Gray)
                                 }
                             }
                         }
 
-                        // Marcador Central / Botão de Ação Flutuante
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            elevation = CardDefaults.cardElevation(8.dp),
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Ponto Seguro Mais Próximo: Praça Central", fontWeight = FontWeight.Bold, color = CorAzulEscuro, fontSize = 14.sp)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("Distância: 350 metros • Rota livre de alagamento", fontSize = 12.sp, color = Color.Gray)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Button(
-                                    onClick = { Toast.makeText(context, "Iniciando navegação guiada para o ponto seguro!", Toast.LENGTH_SHORT).show() },
-                                    modifier = Modifier.fillMaxWidth().height(46.dp),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B8C48))
-                                ) {
-                                    Icon(Icons.Default.Navigation, contentDescription = null, tint = Color.White)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Iniciar Rota de Fuga", color = Color.White, fontWeight = FontWeight.Bold)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                            // Ponto Seguro 1 (Marcador visível)
+                            Card(
+                                shape = RoundedCornerShape(50.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1B8C48)),
+                                modifier = Modifier.clickable { Toast.makeText(context, "Ponto Seguro: Ginásio Municipal (350m)", Toast.LENGTH_SHORT).show() }
+                            ) {
+                                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Ponto Seguro: Ginásio Municipal", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text("Navegação em Andamento", fontWeight = FontWeight.Bold, color = CorAzulEscuro, fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("Siga em direção à Praça Central para evacuação rápida.", fontSize = 12.sp, color = Color.Gray)
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = { Toast.makeText(context, "Rota de fuga encerrada com segurança.", Toast.LENGTH_SHORT).show() },
+                                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                                    ) {
+                                        Text("Encerrar Navegação", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
@@ -743,3 +741,4 @@ fun TelaEditarPerfil(navController: NavController, auth: FirebaseAuth) {
         }
     }
 }
+
