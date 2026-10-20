@@ -103,7 +103,6 @@ fun LogoSafepoint() {
     }
 }
 
-// ================= BARRA DE NAVEGAÇÃO INFERIOR =================
 @Composable
 fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
     NavigationBar(containerColor = Color.White) {
@@ -115,7 +114,7 @@ fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
         )
         NavigationBarItem(
             selected = abaAtual == "Mapa",
-            onClick = { /* Mapa */ },
+            onClick = { },
             icon = { Icon(Icons.Default.Map, contentDescription = "Mapa") },
             label = { Text("Mapa") }
         )
@@ -134,7 +133,6 @@ fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
     }
 }
 
-// ================= TELA DE LOGIN =================
 @Composable
 fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }
@@ -222,7 +220,6 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
-// ================= TELA DE CADASTRO =================
 @Composable
 fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
     var nome by remember { mutableStateOf("") }
@@ -291,7 +288,6 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
-// ================= TELA RECUPERAR SENHA =================
 @Composable
 fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }
@@ -335,7 +331,6 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
     }
 }
 
-// ================= TELA HOME =================
 @Composable
 fun TelaHome(navController: NavController) {
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Início") }) { paddingValues ->
@@ -351,7 +346,6 @@ fun TelaHome(navController: NavController) {
     }
 }
 
-// ================= TELA HISTÓRICO =================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaHistoricoSafepoint(navController: NavController) {
@@ -374,4 +368,7 @@ fun TelaHistoricoSafepoint(navController: NavController) {
     val opcoesFiltro = listOf("Todas", "Hoje", "Esta semana", "Este mês", "Período")
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Histórico") }) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues).
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFF6F8FA)).padding(horizontal = 16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageV
