@@ -36,12 +36,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.MarkerState
-import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -383,41 +377,27 @@ fun TelaHome(navController: NavController) {
 
 @Composable
 fun TelaMapaSafepoint(navController: NavController) {
-    val saoPaulo = LatLng(-23.550520, -46.633308)
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(saoPaulo, 13f)
-    }
-
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController, abaAtual = "Mapa") }) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            GoogleMap(
-                modifier = Modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState
-            ) {
-                Marker(
-                    state = MarkerState(position = saoPaulo),
-                    title = "Ponto Seguro - Catedral da Sé",
-                    snippet = "Área de Evacuação Oficial - Segura"
-                )
-                Marker(
-                    state = MarkerState(position = LatLng(-23.561684, -46.655981)),
-                    title = "Ponto Seguro - Parque Trianon",
-                    snippet = "Abrigo temporário e apoio"
-                )
-            }
-
             Card(
-                modifier = Modifier.align(Alignment.TopCenter).padding(16.dp).fillMaxWidth(),
+                modifier = Modifier.fillMaxSize().padding(12.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
-                elevation = CardDefaults.cardElevation(4.dp)
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
             ) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.MyLocation, contentDescription = null, tint = CorAzulEscuro)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text("GPS Ativo: São Paulo - SP", fontWeight = FontWeight.Bold, color = CorAzulEscuro, fontSize = 14.sp)
-                        Text("Exibindo pontos seguros e rotas de fuga", fontSize = 11.sp, color = Color.Gray)
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(imageVector = Icons.Default.Map, contentDescription = null, tint = Color(0xFF1976D2), modifier = Modifier.size(72.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(text = "Mapa Interativo de Evacuação", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(text = "GPS Ativo: Rota Segura Calculada", fontSize = 13.sp, color = Color.DarkGray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { Toast.makeText(navController.context, "Navegando para o ponto seguro...", Toast.LENGTH_SHORT).show() },
+                            colors = ButtonDefaults.buttonColors(containerColor = CorAzulEscuro)
+                        ) {
+                            Text("Iniciar Rota de Fuga", color = Color.White)
+                        }
                     }
                 }
             }
@@ -484,9 +464,9 @@ fun TelaHistoricoSafepoint(navController: NavController) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(alertasFiltrados) { alerta ->
-                    val corGravidade = when (alerta.gravidade) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
+                items(alertasFiltrados) { alertaItem ->
+                    val corGravidade = when (alertaItem.gravidade) {
                         "Crítica" -> Color(0xFFD32F2F)
                         "Alta" -> Color(0xFFF57C00)
                         else -> Color(0xFFFBC02D)
@@ -497,18 +477,18 @@ fun TelaHistoricoSafepoint(navController: NavController) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(alerta.titulo, fontWeight = FontWeight.Bold, color = CorAzulEscuro, fontSize = 16.sp)
+                            Text(alertaItem.titulo, fontWeight = FontWeight.Bold, color = CorAzulEscuro, fontSize = 16.sp)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(alerta.dataHora, color = Color.Gray, fontSize = 12.sp)
+                            Text(alertaItem.dataHora, color = Color.Gray, fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(alerta.localizacao, color = Color.DarkGray, fontSize = 13.sp)
+                            Text(alertaItem.localizacao, color = Color.DarkGray, fontSize = 13.sp)
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(
                                 modifier = Modifier
                                     .background(corGravidade, RoundedCornerShape(8.dp))
                                     .padding(horizontal = 10.dp, vertical = 4.dp)
                             ) {
-                                Text(alerta.gravidade, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(alertaItem.gravidade, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -639,5 +619,4 @@ fun TelaEditarPerfil(navController: NavController, auth: FirebaseAuth) {
         }
     }
 }
-
 
