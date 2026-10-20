@@ -365,7 +365,7 @@ fun CardAlertaItem(alerta: AlertaRota) {
                 Text(text = alerta.gravidade, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = corGravidade)
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
-                Text(text = "visualizar", color = Color(0xFF1976D2), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(text = "visualizar", color = Color(0xFF1976D2), fontSize =.13.sp, fontWeight = FontWeight.Medium)
                 Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Visualizar", tint = Color(0xFF1976D2), modifier = Modifier.size(16.dp))
             }
         }
