@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -28,8 +27,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.safepoint.ui.screens.EditarPerfilScreen
 
 // Modelo de Dados dos Alertas
 data class AlertaRota(
@@ -40,24 +45,185 @@ data class AlertaRota(
     val gravidade: String
 )
 
+// Rotas do Aplicativo
+sealed class Screen(val route: String) {
+    object Login : Screen("login")
+    object Cadastro : Screen("cadastro")
+    object Home : Screen("home")
+    object Historico : Screen("historico")
+    object EditarPerfil : Screen("editar_perfil")
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                TelaHistoricoSafepoint()
+                val navController = rememberNavController()
+                NavHost(navController = navController, startDestination = Screen.Login.route) {
+                    composable(Screen.Login.route) { TelaLogin(navController) }
+                    composable(Screen.Cadastro.route) { TelaCadastro(navController) }
+                    composable(Screen.Home.route) { TelaHome(navController) }
+                    composable(Screen.Historico.route) { TelaHistoricoSafepoint(navController) }
+                    composable(Screen.EditarPerfil.route) {
+                        EditarPerfilScreen(
+                            onVoltar = { navController.popBackStack() },
+                            onSalvar = { _, _, _, _ ->
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+// ================= TELA DE LOGIN =================
+@Composable
+fun TelaLogin(navController: NavController) {
+    var email by remember { mutableStateOf("") }
+    var senha by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF6F8FA))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Shield,
+            contentDescription = "Logo",
+            tint = Color(0xFF1E88E5),
+            modifier = Modifier.size(64.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "Safepoint", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B3B6F))
+        
+        Spacer(modifier = Modifier.height(32.dp))
+
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("E-mail") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = senha,
+            onValueChange = { senha = it },
+            label = { Text("Senha") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
+        ) {
+            Text("Entrar", fontSize = 16.sp, color = Color.White)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TextButton(onClick = { navController.navigate(Screen.Cadastro.route) }) {
+            Text("Não tem uma conta? Cadastre-se", color = Color(0xFF1976D2))
+        }
+    }
+}
+
+// ================= TELA DE CADASTRO =================
+@Composable
+fun TelaCadastro(navController: NavController) {
+    var nome by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var senha by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF6F8FA))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(text = "Criar Conta", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B3B6F))
+        
+        Spacer(modifier = Modifier.height(24.dp))
+
+        OutlinedTextField(value = nome, onValueChange = { nome = it }, label = { Text("Nome Completo") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("E-mail") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(value = senha, onValueChange = { senha = it }, label = { Text("Senha") }, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation(), shape = RoundedCornerShape(12.dp))
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = { navController.popBackStack() },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+        ) {
+            Text("Cadastrar", fontSize = 16.sp, color = Color.White)
+        }
+
+        TextButton(onClick = { navController.popBackStack() }) {
+            Text("Já tem uma conta? Faça login", color = Color(0xFF1976D2))
+        }
+    }
+}
+
+// ================= TELA HOME =================
+@Composable
+fun TelaHome(navController: NavController) {
+    Scaffold(
+        bottomBar = { BarraNavegacaoInferior(navController) }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color(0xFFF6F8FA))
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(text = "Bem-vindo ao Safepoint!", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B3B6F))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = "Sua plataforma de monitoramento de rotas e alertas.", fontSize = 14.sp, color = Color.Gray)
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Button(
+                onClick = { navController.navigate(Screen.EditarPerfil.route) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F3E8A))
+            ) {
+                Text("Editar Perfil", color = Color.White)
+            }
+        }
+    }
+}
+
+// ================= TELA HISTÓRICO =================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TelaHistoricoSafepoint() {
+fun TelaHistoricoSafepoint(navController: NavController) {
     var textoPesquisa by remember { mutableStateOf("") }
     var filtroSelecionado by remember { mutableStateOf("Todas") }
 
-    // Dados de exemplo baseados no mockup
     val listaAlertas = remember {
         listOf(
             AlertaRota("1", "Enchente Severa - Rio Doce", "15/08/2024, 14:30", "Rua Frei Caneca, 340 - Centro, São Paulo - SP", "Crítica"),
@@ -67,7 +233,6 @@ fun TelaHistoricoSafepoint() {
         )
     }
 
-    // Filtragem em tempo real pelo texto de busca
     val alertasFiltrados = listaAlertas.filter {
         it.titulo.contains(textoPesquisa, ignoreCase = true) ||
                 it.localizacao.contains(textoPesquisa, ignoreCase = true)
@@ -76,7 +241,7 @@ fun TelaHistoricoSafepoint() {
     val opcoesFiltro = listOf("Todas", "Hoje", "Esta semana", "Este mês", "Período")
 
     Scaffold(
-        bottomBar = { BarraNavegacaoInferior() }
+        bottomBar = { BarraNavegacaoInferior(navController) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -85,7 +250,6 @@ fun TelaHistoricoSafepoint() {
                 .background(Color(0xFFF6F8FA))
                 .padding(horizontal = 16.dp)
         ) {
-            // Cabeçalho: Logo + Nome + Notificação
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -94,48 +258,27 @@ fun TelaHistoricoSafepoint() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = "Logo",
-                        tint = Color(0xFF1E88E5),
-                        modifier = Modifier.size(32.dp)
-                    )
+                    Icon(imageVector = Icons.Default.Shield, contentDescription = "Logo", tint = Color(0xFF1E88E5), modifier = Modifier.size(32.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Safepoint",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1B3B6F)
-                    )
+                    Text(text = "Safepoint", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B3B6F))
                 }
-
                 IconButton(onClick = { }) {
-                    Icon(
-                        imageVector = Icons.Default.Notifications,
-                        contentDescription = "Notificações",
-                        tint = Color(0xFF1B3B6F)
-                    )
+                    Icon(imageVector = Icons.Default.Notifications, contentDescription = "Notificações", tint = Color(0xFF1B3B6F))
                 }
             }
 
-            // Título principal da página
             Text(
                 text = "Histórico de Rotas",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF1B3B6F),
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 8.dp)
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp)
             )
 
-            // Campo de Pesquisa
             OutlinedTextField(
                 value = textoPesquisa,
                 onValueChange = { textoPesquisa = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 placeholder = { Text("Pesquisar rotas...", color = Color.Gray) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
                 shape = RoundedCornerShape(24.dp),
@@ -147,22 +290,9 @@ fun TelaHistoricoSafepoint() {
                 )
             )
 
-            // Seção de Filtros (Filtro por chips)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(vertical = 8.dp)
-            ) {
-                Text(
-                    text = "Filtrar por:",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1B3B6F),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                Text(text = "Filtrar por:", fontWeight = FontWeight.Bold, color = Color(0xFF1B3B6F), fontSize = 14.sp, modifier = Modifier.padding(end = 8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(opcoesFiltro) { opcao ->
                         val selecionado = (opcao == filtroSelecionado)
                         FilterChip(
@@ -181,13 +311,9 @@ fun TelaHistoricoSafepoint() {
                 }
             }
 
-            // Lista de Cards de Ocorrências
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(top = 8.dp)
+                modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)
             ) {
                 items(alertasFiltrados) { alerta ->
                     CardAlertaItem(alerta = alerta)
@@ -206,115 +332,71 @@ fun CardAlertaItem(alerta: AlertaRota) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Ícone da categoria em um círculo azul claro
             Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(Color(0xFFE1F5FE), CircleShape),
+                modifier = Modifier.size(44.dp).background(Color(0xFFE1F5FE), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.WaterDrop,
-                    contentDescription = null,
-                    tint = Color(0xFF0288D1),
-                    modifier = Modifier.size(24.dp)
-                )
+                Icon(imageVector = Icons.Default.WaterDrop, contentDescription = null, tint = Color(0xFF0288D1), modifier = Modifier.size(24.dp))
             }
-
             Spacer(modifier = Modifier.width(12.dp))
-
-            // Informações do Alerta
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = alerta.titulo,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = Color(0xFF1B3B6F)
-                )
-
+                Text(text = alerta.titulo, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF1B3B6F))
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(text = alerta.dataHora, fontSize = 12.sp, color = Color.Gray)
                 }
-
                 Spacer(modifier = Modifier.height(2.dp))
-
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(text = alerta.localizacao, fontSize = 12.sp, color = Color.Gray, maxLines = 1)
                 }
-
                 Spacer(modifier = Modifier.height(6.dp))
-
                 val corGravidade = when (alerta.gravidade) {
                     "Crítica" -> Color.Red
                     "Alta" -> Color(0xFFFFA000)
                     else -> Color(0xFFFBC02D)
                 }
-
-                Text(
-                    text = alerta.gravidade,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = corGravidade
-                )
+                Text(text = alerta.gravidade, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = corGravidade)
             }
-
-            // Ação 'visualizar >'
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 4.dp)
-            ) {
-                Text(
-                    text = "visualizar",
-                    color = Color(0xFF1976D2),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Visualizar",
-                    tint = Color(0xFF1976D2),
-                    modifier = Modifier.size(16.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
+                Text(text = "visualizar", color = Color(0xFF1976D2), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Visualizar", tint = Color(0xFF1976D2), modifier = Modifier.size(16.dp))
             }
         }
     }
 }
 
+// ================= BARRA DE NAVEGAÇÃO INFERIOR =================
 @Composable
-fun BarraNavegacaoInferior() {
+fun BarraNavegacaoInferior(navController: NavController) {
     NavigationBar(containerColor = Color.White) {
         NavigationBarItem(
             selected = false,
-            onClick = { },
+            onClick = { navController.navigate(Screen.Home.route) },
             icon = { Icon(Icons.Default.Home, contentDescription = "Início") },
             label = { Text("Início") }
         )
         NavigationBarItem(
             selected = false,
-            onClick = { },
+            onClick = { /* Mapa */ },
             icon = { Icon(Icons.Default.Map, contentDescription = "Mapa") },
             label = { Text("Mapa") }
         )
         NavigationBarItem(
-            selected = true,
-            onClick = { },
+            selected = false,
+            onClick = { navController.navigate(Screen.Historico.route) },
             icon = { Icon(Icons.Default.DateRange, contentDescription = "Histórico") },
             label = { Text("Histórico") }
         )
         NavigationBarItem(
             selected = false,
-            onClick = { },
+            onClick = { navController.navigate(Screen.EditarPerfil.route) },
             icon = { Icon(Icons.Default.Person, contentDescription = "Perfil") },
             label = { Text("Perfil") }
         )
