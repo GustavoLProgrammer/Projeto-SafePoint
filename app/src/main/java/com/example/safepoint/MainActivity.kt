@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.example.safepoint.ui.screens.MapaScreen
 import com.example.safepoint.ui.theme.SafepointTheme
 import com.google.firebase.auth.FirebaseAuth
 
@@ -85,8 +86,13 @@ fun FluxoAutenticacao(modifier: Modifier = Modifier) {
         "HOME" -> {
             TelaHomeSucesso(
                 modifier = modifier,
-                onSair = { telaAtual = "LOGIN" }
+                onSair = { telaAtual = "LOGIN" },
+                onIrParaMapa = { telaAtual = "MAP" }
             )
+        }
+
+        "MAP" -> {
+            MapaScreen(onVoltar = { telaAtual = "HOME"})
         }
     }
 }
@@ -104,7 +110,7 @@ fun TelaLogin(
     val context = LocalContext.current
 
     val azulEscuro = Color(0xFF0F3E8A)
-    val azulLinhas = Color(0xFF1976D2)
+    val azulLinhas = Color(0xFF1C8DF5)
     val verdeGradiente = Color(0xFF1E9B44)
     val cinzaTexto = Color(0xFF7A8B9E)
     val cinzaBorda = Color(0xFFD6DFE8)
@@ -296,7 +302,11 @@ fun TelaLogin(
 }
 
 @Composable
-fun TelaHomeSucesso(modifier: Modifier = Modifier, onSair: () -> Unit) {
+fun TelaHomeSucesso(
+    modifier: Modifier = Modifier,
+    onSair: () -> Unit,
+    onIrParaMapa: () -> Unit
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -311,6 +321,17 @@ fun TelaHomeSucesso(modifier: Modifier = Modifier, onSair: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
         Text("Login efetuado com sucesso.", color = Color(0xFF1EA84C), fontSize = 16.sp)
         Spacer(modifier = Modifier.height(32.dp))
+
+        Button(
+            onClick = onIrParaMapa,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+            modifier = modifier.fillMaxWidth(0.6f)
+        ) {
+            Text("Ver Mapa", color = Color.White, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Button(
             onClick = {
                 FirebaseAuth.getInstance().signOut()
