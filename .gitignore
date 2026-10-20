@@ -16,3 +16,6 @@ local.properties
 *.apk
 *.zip
 SafePoint/
+google-services.json
+app/google-services.json
+/SafePoint/
