@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -71,7 +72,7 @@ val BotaoGradiente = Brush.horizontalGradient(
     colors = listOf(CorAzulEscuro, CorVerdeBotao)
 )
 
-// ================= DATA CLASSES =================
+// ================= DATA CLASS =================
 data class AlertaRota(
     val id: String,
     val titulo: String,
@@ -127,7 +128,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ================= LOGOS =================
+// ================= LOGO PIN =================
 @Composable
 fun LogoPin() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -158,6 +159,7 @@ fun LogoPin() {
     }
 }
 
+// ================= LOGO ESCUDO =================
 @Composable
 fun LogoEscudo() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -195,7 +197,10 @@ fun BotaoGradiente(texto: String, onClick: () -> Unit) {
         contentPadding = PaddingValues(0.dp),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
     ) {
-        Box(modifier = Modifier.fillMaxSize().background(BotaoGradiente, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(BotaoGradiente, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
             Text(texto, fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
@@ -288,10 +293,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
                     leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CorAzulEscuro,
-                        unfocusedBorderColor = Color(0xFFD6DFE8)
-                    ),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(14.dp))
@@ -313,10 +315,7 @@ fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
                     visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CorAzulEscuro,
-                        unfocusedBorderColor = Color(0xFFD6DFE8)
-                    ),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -418,10 +417,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = CorAzulEscuro) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -433,10 +429,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null, tint = CorAzulEscuro) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -448,10 +441,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 leadingIcon = { Icon(Icons.Outlined.Phone, contentDescription = null, tint = CorAzulEscuro) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
             )
@@ -474,10 +464,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -499,10 +486,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 visualTransformation = if (confirmarSenhaVisivel) VisualTransformation.None else PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -515,10 +499,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = CorAzulEscuro) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CorAzulEscuro,
-                    unfocusedBorderColor = Color(0xFFD6DFE8)
-                ),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -617,10 +598,7 @@ fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
                     placeholder = { Text("E-mail", color = Color.Gray) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CorAzulEscuro,
-                        unfocusedBorderColor = Color(0xFFD6DFE8)
-                    ),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CorAzulEscuro, unfocusedBorderColor = Color(0xFFD6DFE8)),
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(24.dp))
@@ -801,8 +779,8 @@ fun TelaMapa(navController: NavController) {
     val locationPermissionRequest = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        val fineGranted: Boolean = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseGranted: Boolean = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
         if (fineGranted || coarseGranted) {
             obterLocalizacao(context) { lat, lng ->
                 localizacaoAtual = Pair(lat, lng)
@@ -905,10 +883,11 @@ fun TelaMapa(navController: NavController) {
     }
 }
 
+// ================= FUNÇÃO LOCALIZAÇÃO =================
 fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> Unit) {
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-    val fineGranted = ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    val coarseGranted = ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val fineGranted: Boolean = ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val coarseGranted: Boolean = ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     if (!fineGranted && !coarseGranted) return
 
     val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
@@ -1070,69 +1049,41 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth) {
             }
 
             Column(
-                    Text(nomeExibido, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-            if (displayName != null) {
-                .fillMaxSize()
-                                        color = Color.White,
-                            }
-                    .padding(24.dp),
-            Box(
-    Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
-                    label = { Text("Nome") },
-                    modifier = Modifier.fillMaxWidth(),
-                                    fontWeight = FontWeight.Bold,
-                            .clip(CircleShape)
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    Text(email, fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f))
-                .padding(paddingValues)
-                                        fontWeight = FontWeight.Bold
-                            Spacer(modifier = Modifier.height(8.dp))
-                modifier = Modifier
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                            .background(Color.White),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
-                }
-                .background(Color(0xFFF6F8FA))
-                            Text(alerta.localizacao, fontSize = 13.sp, color = Color.Gray)
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true,
-                        contentAlignment = Alignment.Center
             ) {
-                shape = RoundedCornerShape(12.dp),
-                    enabled = false
-                    ) {
                 Text("Editar Perfil", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
-                singleLine = true
-                )
-                        Icon(Icons.Default.Person, contentDescription = "Perfil", tint = CorAzulEscuro, modifier = Modifier.size(64.dp))
-            )
-
-                    }
 
                 OutlinedTextField(
-            LazyColumn(
-                    value = telefone,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    onValueChange = { telefone = it },
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-                    label = { Text("Telefone") },
-            ) {
+                    value = nome,
+                    onValueChange = { nome = it },
+                    label = { Text("Nome") },
                     modifier = Modifier.fillMaxWidth(),
-                items(alertasFiltrados) { alerta ->
                     shape = RoundedCornerShape(12.dp),
-                    Card(
-                    singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                    singleLine = true
                 )
-                    ) {
 
-                        Column(modifier = Modifier.padding(16.dp)) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {},
+                    label = { Text("E-mail") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true,
+                    enabled = false
+                )
+
+                OutlinedTextField(
+                    value = telefone,
+                    onValueChange = { telefone = it },
+                    label = { Text("Telefone") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+
                 BotaoGradiente(texto = "Salvar Alterações") {
-                            Row(
                     Toast.makeText(context, "Perfil atualizado com sucesso!", Toast.LENGTH_SHORT).show()
                 }
 
@@ -1155,5 +1106,3 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth) {
         }
     }
 }
-
-            
