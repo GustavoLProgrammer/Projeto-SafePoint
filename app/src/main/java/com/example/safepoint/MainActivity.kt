@@ -103,6 +103,44 @@ fun LogoSafepoint() {
     }
 }
 
+   when (telaAtual) {
+        "LOGIN" -> {
+            TelaLogin(
+                modifier = modifier,
+                onIrParaCadastro = { telaAtual = "CADASTRO" },
+                onLoginSucesso = { telaAtual = "HOME" },
+                usuarios = usuariosCadastrados
+            )
+        }
+
+        "CADASTRO" -> {
+            CadastroScreen(
+                onVoltarParaLogin = { telaAtual = "LOGIN" },
+                onCadastroSucesso = { email, senha ->
+                    usuariosCadastrados[email] = senha
+                    telaAtual = "LOGIN"
+                }
+            )
+        }
+
+        "HOME" -> {
+            HomeScreen(
+                onAbrirSOS = { telaAtual = "SOS" },
+                onAbrirAjuda = { telaAtual = "AJUDA" }
+            )
+        }
+
+        "SOS" -> {
+            TelaSOS(
+                onVoltar = { telaAtual = "HOME" }
+            )
+        }
+
+        "AJUDA" -> {
+            TelaAjuda(
+                onVoltar = { telaAtual = "HOME" }
+            )
+        }
 @Composable
 fun BarraNavegacaoInferior(navController: NavController, abaAtual: String) {
     NavigationBar(containerColor = Color.White) {
