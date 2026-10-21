@@ -548,7 +548,7 @@ fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
                 if (senha != confirmarSenha) { Toast.makeText(context, "As senhas não coincidem", Toast.LENGTH_SHORT).show(); return@BotaoGradiente }
                 auth.createUserWithEmailAndPassword(email, senha).addOnSuccessListener { result ->
                     val userId = result.user?.uid ?: ""
-                    val perfil = hashMapOf("nome" to nome, "email" to email, "telefone" to telefone, "dataNascimento" to dataNascimento)
+                    val perfil: Map<String, Any?> = hashMapOf("nome" to nome, "email" to email, "telefone" to telefone, "dataNascimento" to dataNascimento)
                     db.collection("usuarios").document(userId).set(perfil).addOnSuccessListener { PrefsHelper.setUserId(context, userId); Toast.makeText(context, "Conta criada com sucesso!", Toast.LENGTH_SHORT).show(); navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } }.addOnFailureListener { e -> Toast.makeText(context, "Erro ao salvar perfil: ${e.message}", Toast.LENGTH_LONG).show() }
                 }.addOnFailureListener { e -> Toast.makeText(context, "Erro: ${e.localizedMessage}", Toast.LENGTH_LONG).show() }
             }
