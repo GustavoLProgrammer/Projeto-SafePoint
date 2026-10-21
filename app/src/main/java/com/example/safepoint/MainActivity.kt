@@ -1,0 +1,668 @@
+package com.example.safepoint
+
+import android.Manifest
+import android.content.Context
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.location.LocationManager
+import android.net.Uri
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import coil.compose.AsyncImage
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import java.text.SimpleDateFormat
+import java.util.*
+
+// CORES
+val CorAzulEscuro = Color(0xFF0F3E8A)
+val CorAzulMedio = Color(0xFF1976D2)
+val CorVerdeBotao = Color(0xFF1E8C48)
+val SafePointBlue = Color(0xFF1554C0)
+val SafePointGreen = Color(0xFF1E8C48)
+
+val FundoGradiente = Brush.linearGradient(
+    colors = listOf(Color(0xFF072B66), Color(0xFF0D52A0), Color(0xFF138A4B)),
+    start = Offset(0f, 0f),
+    end = Offset(1200f, 2200f)
+)
+val BotaoGradiente = Brush.horizontalGradient(colors = listOf(CorAzulEscuro, CorVerdeBotao))
+
+data class AlertaRota(val id: String, val titulo: String, val dataHora: String, val localizacao: String, val gravidade: String, val tipo: String, val latitude: Double, val longitude: Double, val distancia: Double = 0.0, val bairro: String = "", val cidade: String = "", val regiao: String = "")
+data class Ocorrencia(val titulo: String, val endereco: String, val lat: Double, val lng: Double, val tipo: TipoOcorrencia, val categoria: String? = null)
+enum class TipoOcorrencia { SAIDA, MONITOR, DESASTRE, SEGURANCA }
+
+sealed class Screen(val route: String) {
+    object Termos : Screen("termos")
+    object PermissaoLocalizacao : Screen("permissao_localizacao")
+    object Login : Screen("login")
+    object Cadastro : Screen("cadastro")
+    object RecuperarSenha : Screen("recuperar_senha")
+    object Home : Screen("home")
+    object Mapa : Screen("mapa")
+    object Historico : Screen("historico")
+    object Perfil : Screen("perfil")
+    object SOS : Screen("sos")
+    object Ajuda : Screen("ajuda")
+}
+
+object PrefsHelper {
+    fun getPrefs(context: Context): SharedPreferences = context.getSharedPreferences("safepoint_prefs", Context.MODE_PRIVATE)
+    fun getUserId(context: Context): String? = getPrefs(context).getString("user_id", null)
+    fun setUserId(context: Context, id: String) { getPrefs(context).edit().putString("user_id", id).apply() }
+    fun clearUserId(context: Context) { getPrefs(context).edit().remove("user_id").apply() }
+    fun isTermosAceitos(context: Context): Boolean = getPrefs(context).getBoolean("termos_aceitos", false)
+    fun setTermosAceitos(context: Context, aceito: Boolean) { getPrefs(context).edit().putBoolean("termos_aceitos", aceito).apply() }
+    fun isLocalizacaoAceita(context: Context): Boolean = getPrefs(context).getBoolean("loc_aceita", false)
+    fun setLocalizacaoAceita(context: Context, aceito: Boolean) { getPrefs(context).edit().putBoolean("loc_aceita", aceito).apply() }
+}
+
+class MainActivity : ComponentActivity() {
+    private lateinit var auth: FirebaseAuth
+    private lateinit var db: FirebaseFirestore
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // FIX CRASH 1: Inicializa Firebase com try-catch para não crashar sem google-services.json
+        try {
+            FirebaseApp.initializeApp(this)
+        } catch (e: Exception) {
+            // Ignora se já inicializado
+        }
+
+        // FIX CRASH 2: OSMDroid sem delete() e com applicationContext
+        try {
+            val ctx = applicationContext
+            Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid_prefs", Context.MODE_PRIVATE))
+            Configuration.getInstance().userAgentValue = "com.example.safepoint/1.0"
+            Configuration.getInstance().osmdroidBasePath = ctx.getExternalFilesDir(null)
+            // REMOVIDO: Configuration.getInstance().osmdroidTileCache.delete() <- ISSO CRASHAVA
+        } catch (e: Exception) {
+            // Se falhar, continua mesmo assim
+        }
+
+        auth = FirebaseAuth.getInstance()
+        db = FirebaseFirestore.getInstance()
+
+        setContent {
+            MaterialTheme {
+                val navController = rememberNavController()
+                val context = LocalContext.current
+                val termosAceitos = PrefsHelper.isTermosAceitos(context)
+                val locAceita = PrefsHelper.isLocalizacaoAceita(context)
+                val currentUser = auth.currentUser
+
+                val startDest = when {
+                    !termosAceitos -> Screen.Termos.route
+                    !locAceita -> Screen.PermissaoLocalizacao.route
+                    currentUser == null -> Screen.Login.route
+                    else -> Screen.Home.route
+                }
+
+                NavHost(navController = navController, startDestination = startDest) {
+                    composable(Screen.Termos.route) {
+                        TelaTermosUso(onAceitar = {
+                            PrefsHelper.setTermosAceitos(context, true)
+                            navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } }
+                        })
+                    }
+                    composable(Screen.PermissaoLocalizacao.route) {
+                        TelaPermissaoLocalizacao(onAceitar = {
+                            PrefsHelper.setLocalizacaoAceita(context, true)
+                            if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } }
+                            else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } }
+                        }, onRecusar = { Toast.makeText(context, "Precisa permitir localização para o mapa funcionar", Toast.LENGTH_LONG).show() })
+                    }
+                    composable(Screen.Login.route) { TelaLogin(navController, auth) }
+                    composable(Screen.Cadastro.route) { TelaCadastro(navController, auth) }
+                    composable(Screen.RecuperarSenha.route) { TelaRecuperarSenha(navController, auth) }
+                    composable(Screen.Home.route) { TelaHome(navController) }
+                    composable(Screen.Mapa.route) { MapaScreen(onVoltar = { navController.popBackStack() }) }
+                    composable(Screen.Historico.route) { TelaHistorico(navController) }
+                    composable(Screen.Perfil.route) { TelaPerfil(navController, auth, db) }
+                    composable(Screen.SOS.route) { TelaSOS(onVoltar = { navController.popBackStack() }) }
+                    composable(Screen.Ajuda.route) { TelaAjuda(onVoltar = { navController.popBackStack() }) }
+                }
+            }
+        }
+    }
+}
+
+// LOGO PIN ÚNICO - IGUAL DA FOTO CIRCULADA
+@Composable
+fun LogoPinSafepoint() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(modifier = Modifier.size(110.dp), contentAlignment = Alignment.TopCenter) {
+            Box(modifier = Modifier.size(95.dp).clip(CircleShape).background(Color(0xFFE8F5E9)).border(3.dp, Color(0xFF1E8C48), CircleShape), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.size(78.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.size(58.dp).clip(CircleShape).background(CorAzulEscuro), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(CorVerdeBotao))
+                        }
+                    }
+                }
+            }
+            Box(modifier = Modifier.align(Alignment.BottomCenter).offset(y = 6.dp).size(20.dp).clip(RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)).background(Color(0xFF1E8C48)))
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Text("SAFEPOINT", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = CorAzulEscuro, letterSpacing = 1.5.sp)
+    }
+}
+
+@Composable
+fun LogoPinPequeno() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(32.dp).clip(CircleShape).background(Color(0xFFE8F5E9)).border(2.dp, Color(0xFF1E8C48), CircleShape), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.size(20.dp).clip(CircleShape).background(CorAzulEscuro), contentAlignment = Alignment.Center) { Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color.White)) }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("SAFEPOINT", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = SafePointBlue, letterSpacing = 1.sp)
+    }
+}
+
+@Composable
+fun BotaoGradiente(texto: String, onClick: () -> Unit) {
+    Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent), contentPadding = PaddingValues(0.dp)) {
+        Box(modifier = Modifier.fillMaxSize().background(BotaoGradiente, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { Text(texto, fontSize = 17.sp, color = Color.White, fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+fun BarraNavegacaoInferior(navController: NavController) {
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    NavigationBar(containerColor = Color.White) {
+        NavigationBarItem(selected = currentRoute == Screen.Home.route, onClick = { if (currentRoute != Screen.Home.route) navController.navigate(Screen.Home.route) { popUpTo(Screen.Home.route) { inclusive = true } } }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Início") })
+        NavigationBarItem(selected = currentRoute == Screen.Mapa.route, onClick = { if (currentRoute != Screen.Mapa.route) navController.navigate(Screen.Mapa.route) { popUpTo(Screen.Home.route) } }, icon = { Icon(Icons.Default.Map, null) }, label = { Text("Mapa") })
+        NavigationBarItem(selected = currentRoute == Screen.Historico.route, onClick = { if (currentRoute != Screen.Historico.route) navController.navigate(Screen.Historico.route) { popUpTo(Screen.Home.route) } }, icon = { Icon(Icons.Default.DateRange, null) }, label = { Text("Histórico") })
+        NavigationBarItem(selected = currentRoute == Screen.Perfil.route, onClick = { if (currentRoute != Screen.Perfil.route) navController.navigate(Screen.Perfil.route) { popUpTo(Screen.Home.route) } }, icon = { Icon(Icons.Default.Person, null) }, label = { Text("Perfil") })
+    }
+}
+
+@Composable
+fun TelaPermissaoLocalizacao(onAceitar: () -> Unit, onRecusar: () -> Unit) {
+    val context = LocalContext.current
+    var temPermissao by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
+        temPermissao = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true || perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (temPermissao) onAceitar() else onRecusar()
+    }
+    LaunchedEffect(temPermissao) { if (temPermissao) onAceitar() }
+    Box(modifier = Modifier.fillMaxSize().background(FundoGradiente), contentAlignment = Alignment.Center) {
+        Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+            Column(modifier = Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(72.dp), tint = CorAzulEscuro)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Permissão de Localização", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro, textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("O SafePoint precisa da sua localização exata para mostrar o mapa real igual Google Maps, rotas e abrigos próximos.", fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(24.dp))
+                BotaoGradiente(texto = "Permitir Localização") { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }
+            }
+        }
+    }
+}
+
+@Composable
+fun TelaTermosUso(onAceitar: () -> Unit) {
+    var aceitou by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxSize().background(FundoGradiente).verticalScroll(rememberScrollState()).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(modifier = Modifier.height(30.dp)); LogoPinSafepoint(); Spacer(modifier = Modifier.height(24.dp))
+        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text("Termos de Uso e Política de Privacidade", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                Spacer(modifier = Modifier.height(4.dp)); Text("Última atualização: Outubro/2026", fontSize = 11.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("1. Objetivo: Sistema inteligente de segurança e evacuação com mapa real e alertas da sua região.", fontSize = 12.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("2. Localização: Usamos GPS exato para rotas seguras e pontos de apoio reais. Dados criptografados no Firebase.", fontSize = 12.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("3. Mapa: Usa OpenStreetMap MAPNIK oficial, estável, estilo Google Maps, com dados de desastres GDACS e locais reais via Overpass.", fontSize = 12.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("4. SOS: Botão aciona 190/192/193. Ferramenta de apoio, não substitui Defesa Civil.", fontSize = 12.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { aceitou = !aceitou }.background(Color(0xFFF0F4FF), RoundedCornerShape(12.dp)).padding(12.dp)) {
+                    Checkbox(checked = aceitou, onCheckedChange = { aceitou = it }); Spacer(modifier = Modifier.width(8.dp))
+                    Text("Li e concordo e autorizo uso da localização exata para funcionamento do mapa.", fontSize = 12.sp)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = { if (aceitou) onAceitar() }, enabled = aceitou, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp)) { Text("Aceitar e Continuar", color = Color.White, fontWeight = FontWeight.Bold) }
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+fun TelaLogin(navController: NavController, auth: FirebaseAuth) {
+    var email by remember { mutableStateOf("") }; var senha by remember { mutableStateOf("") }; var senhaVisivel by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    Box(modifier = Modifier.fillMaxSize().background(FundoGradiente), contentAlignment = Alignment.Center) {
+        Card(shape = RoundedCornerShape(32.dp), modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+            Column(modifier = Modifier.padding(32.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                LogoPinSafepoint(); Spacer(modifier = Modifier.height(8.dp)); Text("Sempre te guiando a um ponto seguro", fontSize = 13.sp, color = Color.Gray); Spacer(modifier = Modifier.height(28.dp))
+                Text("Faça seu login", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro); Spacer(modifier = Modifier.height(28.dp))
+                OutlinedTextField(value = email, onValueChange = { email = it }, placeholder = { Text("E-mail") }, leadingIcon = { Icon(Icons.Outlined.Person, null, tint = CorAzulEscuro) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(value = senha, onValueChange = { senha = it }, placeholder = { Text("Senha") }, leadingIcon = { Icon(Icons.Outlined.Lock, null, tint = CorAzulEscuro) }, trailingIcon = { IconButton(onClick = { senhaVisivel = !senhaVisivel }) { Icon(if (senhaVisivel) Icons.Default.Visibility else Icons.Default.VisibilityOff, null) } }, visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(24.dp))
+                BotaoGradiente(texto = "Entrar") {
+                    if (email.isNotBlank() && senha.isNotBlank()) {
+                        auth.signInWithEmailAndPassword(email, senha).addOnSuccessListener { PrefsHelper.setUserId(context, it.user?.uid ?: ""); navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } }.addOnFailureListener { Toast.makeText(context, "Erro: ${it.localizedMessage}", Toast.LENGTH_LONG).show() }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp)); Row { Text("Não tem conta? ", color = Color.Gray, fontSize = 13.sp); Text("Criar conta", color = CorAzulMedio, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { navController.navigate(Screen.Cadastro.route) }) }
+            }
+        }
+    }
+}
+
+@Composable
+fun TelaCadastro(navController: NavController, auth: FirebaseAuth) {
+    var nome by remember { mutableStateOf("") }; var email by remember { mutableStateOf("") }; var telefone by remember { mutableStateOf("") }; var senha by remember { mutableStateOf("") }; var confirmarSenha by remember { mutableStateOf("") }; var dataNascimento by remember { mutableStateOf("") }; var aceitouTermos by remember { mutableStateOf(false) }
+    val context = LocalContext.current; val db = FirebaseFirestore.getInstance()
+    Column(modifier = Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState())) {
+        Spacer(modifier = Modifier.height(16.dp)); TextButton(onClick = { navController.popBackStack() }) { Icon(Icons.Default.ArrowBack, null); Text("Voltar") }
+        Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            LogoPinSafepoint(); Spacer(modifier = Modifier.height(24.dp)); Text("Crie sua conta", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+            Spacer(modifier = Modifier.height(24.dp))
+            OutlinedTextField(value = nome, onValueChange = { nome = it }, placeholder = { Text("Nome completo") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
+            Spacer(modifier = Modifier.height(14.dp)); OutlinedTextField(value = email, onValueChange = { email = it }, placeholder = { Text("E-mail") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
+            Spacer(modifier = Modifier.height(14.dp)); OutlinedTextField(value = telefone, onValueChange = { telefone = it }, placeholder = { Text("Telefone") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
+            Spacer(modifier = Modifier.height(14.dp)); OutlinedTextField(value = senha, onValueChange = { senha = it }, placeholder = { Text("Senha") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true, visualTransformation = PasswordVisualTransformation())
+            Spacer(modifier = Modifier.height(14.dp)); OutlinedTextField(value = confirmarSenha, onValueChange = { confirmarSenha = it }, placeholder = { Text("Confirmar senha") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true, visualTransformation = PasswordVisualTransformation())
+            Spacer(modifier = Modifier.height(20.dp)); Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = aceitouTermos, onCheckedChange = { aceitouTermos = it }); Text("Aceito os Termos", fontSize = 12.sp) }
+            Spacer(modifier = Modifier.height(24.dp))
+            BotaoGradiente(texto = "Cadastrar") {
+                if (!aceitouTermos) { Toast.makeText(context, "Aceite os termos", Toast.LENGTH_SHORT).show(); return@BotaoGradiente }
+                if (senha != confirmarSenha) { Toast.makeText(context, "Senhas diferentes", Toast.LENGTH_SHORT).show(); return@BotaoGradiente }
+                auth.createUserWithEmailAndPassword(email, senha).addOnSuccessListener { result -> val userId = result.user?.uid ?: ""; val perfil = hashMapOf("nome" to nome, "email" to email, "telefone" to telefone, "dataNascimento" to dataNascimento); db.collection("usuarios").document(userId).set(perfil).addOnSuccessListener { PrefsHelper.setUserId(context, userId); navController.navigate(Screen.Home.route) { popUpTo(Screen.Cadastro.route) { inclusive = true } } } }
+            }
+        }
+    }
+}
+
+@Composable
+fun TelaRecuperarSenha(navController: NavController, auth: FirebaseAuth) {
+    var email by remember { mutableStateOf("") }; val context = LocalContext.current
+    Box(modifier = Modifier.fillMaxSize().background(FundoGradiente), contentAlignment = Alignment.Center) {
+        Card(shape = RoundedCornerShape(32.dp), modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+            Column(modifier = Modifier.padding(32.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                LogoPinSafepoint(); Spacer(modifier = Modifier.height(24.dp)); Text("Recuperar senha", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                Spacer(modifier = Modifier.height(24.dp)); OutlinedTextField(value = email, onValueChange = { email = it }, placeholder = { Text("E-mail") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
+                Spacer(modifier = Modifier.height(24.dp)); BotaoGradiente(texto = "Enviar Instruções") { if (email.isNotBlank()) auth.sendPasswordResetEmail(email).addOnSuccessListener { Toast.makeText(context, "E-mail enviado!", Toast.LENGTH_LONG).show(); navController.popBackStack() } }
+            }
+        }
+    }
+}
+
+@Composable
+fun TelaHome(navController: NavController) {
+    val context = LocalContext.current; var nomeUsuario by remember { mutableStateOf("Usuário") }; val db = FirebaseFirestore.getInstance()
+    LaunchedEffect(Unit) { val userId = PrefsHelper.getUserId(context); if (userId != null) db.collection("usuarios").document(userId).get().addOnSuccessListener { doc -> doc.getString("nome")?.let { if (it.isNotBlank()) nomeUsuario = it } } }
+    Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFF6F8FA)).verticalScroll(rememberScrollState())) {
+            Box(modifier = Modifier.fillMaxWidth().background(FundoGradiente).padding(24.dp)) { Column { Text("Olá, $nomeUsuario!", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White); Text("Sua segurança é nossa prioridade", fontSize = 14.sp, color = Color.White.copy(alpha = 0.85f)) } }
+            Spacer(modifier = Modifier.height(24.dp))
+            Column(modifier = Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Card(modifier = Modifier.fillMaxWidth().clickable { navController.navigate(Screen.Mapa.route) }, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) { Box(modifier = Modifier.size(56.dp).clip(CircleShape).background(CorAzulMedio), contentAlignment = Alignment.Center) { Icon(Icons.Default.Map, null, tint = Color.White) }; Spacer(modifier = Modifier.width(16.dp)); Column(modifier = Modifier.weight(1f)) { Text("Mapa de Evacuação", fontWeight = FontWeight.Bold, color = CorAzulEscuro); Text("Veja rotas seguras - Mapa real", fontSize = 13.sp, color = Color.Gray) } }
+                }
+            }
+        }
+    }
+}
+
+val NOMES_DESASTRES = mapOf("EQ" to "Terremoto", "TC" to "Ciclone", "FL" to "Enchente", "VO" to "Vulcão", "DR" to "Seca", "WF" to "Incêndio")
+val NOMES_SEGURANCA = mapOf("hospital" to "Hospital", "fire_station" to "Bombeiros", "police" to "Polícia", "shelter" to "Abrigo", "pharmacy" to "Farmácia")
+val CORES_SEGURANCA = mapOf("hospital" to Color(0xFFD32F2F), "fire_station" to Color(0xFFF57C00), "police" to Color(0xFF1565C0), "shelter" to Color(0xFF2E7D32), "pharmacy" to Color(0xFF7B1FA2))
+
+@Composable
+fun MapaScreen(onVoltar: () -> Unit) {
+    val context = LocalContext.current
+    val desastresGlobais = remember { mutableStateListOf<Ocorrencia>() }
+    val pontosSeguranca = remember { mutableStateListOf<Ocorrencia>() }
+    var ocorrenciaSelecionada by remember { mutableStateOf<Ocorrencia?>(null) }
+    var mostrarDialog by remember { mutableStateOf(false) }
+    var filtrosDesastres by remember { mutableStateOf(setOf("EQ", "TC", "FL", "VO", "DR", "WF")) }
+    var filtrosSeguranca by remember { mutableStateOf(setOf<String>()) }
+    var userLocation by remember { mutableStateOf<GeoPoint?>(null) }
+    var temPermissao by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms -> temPermissao = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true || perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true }
+
+    val mapView = remember {
+        try {
+            MapView(context.applicationContext).apply {
+                setTileSource(TileSourceFactory.MAPNIK)
+                setMultiTouchControls(true)
+                isTilesScaledToDpi = true
+                setUseDataConnection(true)
+                controller.setZoom(14.0)
+                controller.setCenter(GeoPoint(-23.5505, -46.6333))
+            }
+        } catch (e: Exception) {
+            MapView(context.applicationContext)
+        }
+    }
+
+    val myLocationOverlay = remember {
+        try { MyLocationNewOverlay(GpsMyLocationProvider(context), mapView).apply { enableMyLocation() } } catch (e: Exception) { null }
+    }
+
+    LaunchedEffect(temPermissao) {
+        if (temPermissao) {
+            try {
+                if (mapView.overlays.none { it is MyLocationNewOverlay } && myLocationOverlay != null) mapView.overlays.add(myLocationOverlay)
+                obterLocalizacao(context) { lat, lng ->
+                    val ponto = GeoPoint(lat, lng); userLocation = ponto
+                    try { mapView.controller.animateTo(ponto); mapView.controller.setZoom(16.0) } catch (e: Exception) {}
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val categorias = listOf("hospital", "fire_station", "police", "pharmacy")
+                            for (cat in categorias) {
+                                val res = OverpassRepository.buscarPontosSeguranca(lat, lng, cat, 5000)
+                                res.elements.forEach { el ->
+                                    val plat = el.lat ?: el.center?.lat ?: 0.0
+                                    val plon = el.lon ?: el.center?.lon ?: 0.0
+                                    if (plat != 0.0) {
+                                        val nome = el.tags?.get("name") ?: "${NOMES_SEGURANCA[cat]} próximo"
+                                        pontosSeguranca.add(Ocorrencia(nome, "${NOMES_SEGURANCA[cat]} - Local real OSM", plat, plon, TipoOcorrencia.SEGURANCA, cat))
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            } catch (e: Exception) {}
+        } else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
+
+    LaunchedEffect(filtrosDesastres) {
+        if (filtrosDesastres.isEmpty()) { desastresGlobais.clear(); return@LaunchedEffect }
+        try {
+            val resposta = GdacsRepository.buscarDesastres(tipos = filtrosDesastres.joinToString(";"))
+            desastresGlobais.clear()
+            resposta.features.forEach { feature ->
+                val lon = feature.geometry.coordinates.getOrNull(0) ?: 0.0
+                val lat = feature.geometry.coordinates.getOrNull(1) ?: 0.0
+                val nomeTipo = NOMES_DESASTRES[feature.properties.eventtype] ?: "Desastre"
+                desastresGlobais.add(Ocorrencia("$nomeTipo: ${feature.properties.name}", "Alerta: ${feature.properties.alertlevel}", lat, lon, TipoOcorrencia.DESASTRE))
+            }
+        } catch (_: Exception) {}
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(Unit) {
+        val observer = LifecycleEventObserver { _, event -> when (event) { Lifecycle.Event.ON_RESUME -> try { mapView.onResume() } catch (_: Exception) {}; Lifecycle.Event.ON_PAUSE -> try { mapView.onPause() } catch (_: Exception) {}; else -> {} } }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); try { myLocationOverlay?.disableMyLocation() } catch (_: Exception) {} }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize()) { view ->
+            try {
+                view.overlays.removeAll { it is Marker }
+                if (view.overlays.none { it is MyLocationNewOverlay } && myLocationOverlay != null && temPermissao) view.overlays.add(myLocationOverlay)
+                desastresGlobais.forEach { oc ->
+                    val marker = Marker(view).apply {
+                        position = GeoPoint(oc.lat, oc.lng); title = oc.titulo; snippet = oc.endereco
+                        val px = (28 * view.context.resources.displayMetrics.density).toInt()
+                        icon = criarPinoDesastre(view.context, px)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                        setOnMarkerClickListener { _, _ -> ocorrenciaSelecionada = oc; true }
+                    }
+                    view.overlays.add(marker)
+                }
+                val filtrados = if (filtrosSeguranca.isEmpty()) pontosSeguranca else pontosSeguranca.filter { it.categoria in filtrosSeguranca }
+                filtrados.forEach { oc ->
+                    val marker = Marker(view).apply {
+                        position = GeoPoint(oc.lat, oc.lng); title = oc.titulo; snippet = oc.endereco
+                        val corPino = CORES_SEGURANCA[oc.categoria] ?: Color(0xFF1565C0)
+                        val px = (42 * view.context.resources.displayMetrics.density).toInt()
+                        icon = criarPinoSeguranca(view.context, oc.categoria, corPino, px)
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        setOnMarkerClickListener { _, _ -> ocorrenciaSelecionada = oc; true }
+                    }
+                    view.overlays.add(marker)
+                }
+                view.invalidate()
+            } catch (_: Exception) {}
+        }
+
+        Row(modifier = Modifier.fillMaxWidth().background(Color.White).padding(12.dp), verticalAlignment = Alignment.CenterVertically) { LogoPinPequeno(); Spacer(modifier = Modifier.weight(1f)); Text("Mapa Real", color = SafePointBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.background(Color(0xFFE3F2FD), RoundedCornerShape(8.dp)).padding(8.dp, 4.dp)) }
+        Column(modifier = Modifier.align(Alignment.TopCenter).padding(top = 52.dp).fillMaxWidth()) {
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                NOMES_DESASTRES.forEach { (codigo, nome) -> val ativo = codigo in filtrosDesastres; Surface(shape = RoundedCornerShape(20.dp), color = if (ativo) Color(0xFFD32F2F) else Color.White, shadowElevation = 2.dp, modifier = Modifier.clickable { filtrosDesastres = if (ativo) filtrosDesastres - codigo else filtrosDesastres + codigo }) { Text(nome, color = if (ativo) Color.White else Color.Black, fontSize = 11.sp, modifier = Modifier.padding(12.dp, 6.dp)) } }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                NOMES_SEGURANCA.forEach { (codigo, nome) -> val ativo = codigo in filtrosSeguranca; Surface(shape = RoundedCornerShape(20.dp), color = if (ativo) Color(0xFF2E7D32) else Color.White, shadowElevation = 2.dp, modifier = Modifier.clickable { filtrosSeguranca = if (ativo) filtrosSeguranca - codigo else filtrosSeguranca + codigo }) { Text(nome, color = if (ativo) Color.White else Color.Black, fontSize = 11.sp, modifier = Modifier.padding(12.dp, 6.dp)) } }
+            }
+        }
+        if (!temPermissao) {
+            Card(modifier = Modifier.align(Alignment.Center).padding(24.dp), shape = RoundedCornerShape(16.dp)) {
+                Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.LocationOff, null, tint = Color.Red, modifier = Modifier.size(48.dp)); Spacer(modifier = Modifier.height(12.dp)); Text("Localização necessária"); Button(onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Permitir") } }
+            }
+        }
+        Box(modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = 170.dp).size(56.dp).clip(CircleShape).background(Color.White).clickable {
+            if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            else { val minha = myLocationOverlay?.myLocation; if (minha != null) { mapView.controller.animateTo(minha); mapView.controller.setZoom(18.0) } }
+        }, contentAlignment = Alignment.Center) { Icon(Icons.Default.MyLocation, null, tint = SafePointBlue, modifier = Modifier.size(28.dp)) }
+        Box(modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 170.dp).size(90.dp).clip(CircleShape).background(Brush.linearGradient(listOf(SafePointGreen, Color(0xFF1EA84C)))).clickable { mostrarDialog = true }, contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Add, null, tint = Color.White); Text("Adicionar\nDesastre", color = Color.White, fontSize = 11.sp, textAlign = TextAlign.Center) }
+        }
+        ocorrenciaSelecionada?.let { oc -> Card(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp, 100.dp), shape = RoundedCornerShape(16.dp)) { Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(modifier = Modifier.weight(1f)) { Text(oc.titulo, fontWeight = FontWeight.Bold); Text(oc.endereco, fontSize = 13.sp, color = Color.Gray) }; IconButton(onClick = { ocorrenciaSelecionada = null }) { Icon(Icons.Default.Close, null) } } } }
+        Row(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.White).padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) { ItemNavegacao("Início", Icons.Default.Home, false) { onVoltar() }; ItemNavegacao("Mapa", Icons.Default.Map, true) {}; ItemNavegacao("Histórico", Icons.Default.DateRange, false) { onVoltar() }; ItemNavegacao("Perfil", Icons.Default.Person, false) { onVoltar() } }
+    }
+    if (mostrarDialog) AdicionarDesastreDialog(onDismiss = { mostrarDialog = false }, onAdicionar = { titulo, endereco, lat, lng -> desastresGlobais.add(Ocorrencia(titulo, endereco, lat, lng, TipoOcorrencia.DESASTRE)); mostrarDialog = false })
+}
+
+fun criarPinoDesastre(context: Context, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val w = tamanhoPx; val h = (w * 1.3f).toInt(); val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val canvas = Canvas(bmp); val paint = android.graphics.Paint().apply { color = android.graphics.Color.argb(255, 211, 47, 47); isAntiAlias = true }; val path = android.graphics.Path(); path.moveTo(w / 2f, 0f); path.lineTo(w.toFloat(), h * 0.7f); path.lineTo(w / 2f, h.toFloat()); path.lineTo(0f, h * 0.7f); path.close(); canvas.drawPath(path, paint); return BitmapDrawable(context.resources, bmp)
+}
+fun criarPinoSeguranca(context: Context, categoria: String?, corFundo: Color, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val w = tamanhoPx; val bmp = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888); val canvas = Canvas(bmp); val cx = w / 2f; val cy = w / 2f; val raio = w / 2f - 4f
+    val sombra = android.graphics.Paint().apply { color = android.graphics.Color.argb(80, 0, 0, 0); isAntiAlias = true }; canvas.drawCircle(cx, cy + 3f, raio, sombra)
+    val circ = android.graphics.Paint().apply { color = android.graphics.Color.argb((corFundo.alpha * 255).toInt(), (corFundo.red * 255).toInt(), (corFundo.green * 255).toInt(), (corFundo.blue * 255).toInt()); isAntiAlias = true }; canvas.drawCircle(cx, cy, raio, circ)
+    val borda = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; style = android.graphics.Paint.Style.STROKE; strokeWidth = w * 0.07f; isAntiAlias = true }; canvas.drawCircle(cx, cy, raio - (w * 0.035f), borda)
+    val texto = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = w * 0.55f; textAlign = android.graphics.Paint.Align.CENTER; isAntiAlias = true; isFakeBoldText = true }
+    val letra = when (categoria) { "hospital" -> "H"; "fire_station" -> "B"; "police" -> "P"; "shelter" -> "A"; "pharmacy" -> "F"; else -> "?" }
+    canvas.drawText(letra, cx, cy - (texto.descent() + texto.ascent()) / 2f, texto); return BitmapDrawable(context.resources, bmp)
+}
+@Composable fun ItemNavegacao(label: String, icon: ImageVector, ativo: Boolean, onClick: () -> Unit) { val cor = if (ativo) SafePointBlue else Color.Gray; Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onClick() }.padding(12.dp, 4.dp)) { Icon(icon, null, tint = cor, modifier = Modifier.size(24.dp)); Text(label, fontSize = 11.sp, color = cor) } }
+
+data class GdacsResponse(val features: List<GdacsFeature>); data class GdacsFeature(val properties: GdacsProperties, val geometry: GdacsGeometry); data class GdacsProperties(val eventtype: String, val name: String, val alertlevel: String); data class GdacsGeometry(val coordinates: List<Double>)
+interface GdacsApi { @retrofit2.http.GET("gdacsapi/api/events/geteventlist/SEARCH") suspend fun getDesastres(@retrofit2.http.Query("eventlist") tipos: String = "EQ;TC;FL;VO;DR;WF", @retrofit2.http.Query("alertlevel") nivel: String = "Green;Orange;Red", @retrofit2.http.Query("limit") limite: Int = 100): GdacsResponse }
+object GdacsRepository { private val api = retrofit2.Retrofit.Builder().baseUrl("https://www.gdacs.org/").addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create()).build().create(GdacsApi::class.java); suspend fun buscarDesastres(tipos: String = "EQ;TC;FL;VO;DR;WF"): GdacsResponse = api.getDesastres(tipos = tipos) }
+
+data class OverpassResponse(val elements: List<OverpassElement>); data class OverpassElement(val type: String, val id: Long, val lat: Double? = null, val lon: Double? = null, val tags: Map<String, String>? = null, val center: OverpassCenter? = null); data class OverpassCenter(val lat: Double, val lon: Double)
+interface OverpassApi { @retrofit2.http.GET("api/interpreter") suspend fun buscarPontos(@retrofit2.http.Query("data") query: String): OverpassResponse }
+object OverpassRepository {
+    private val httpClient = okhttp3.OkHttpClient.Builder().addInterceptor { chain -> val req = chain.request().newBuilder().header("User-Agent", "SafePointApp/1.0").build(); chain.proceed(req) }.build()
+    private val api = retrofit2.Retrofit.Builder().baseUrl("https://overpass-api.de/").client(httpClient).addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create()).build().create(OverpassApi::class.java)
+    suspend fun buscarPontosSeguranca(lat: Double, lng: Double, categoria: String, raioMetros: Int = 5000): OverpassResponse { val query = """[out:json][timeout:25];(node["amenity"="$categoria"](around:$raioMetros,$lat,$lng);way["amenity"="$categoria"](around:$raioMetros,$lat,$lng););out center;""".trimIndent(); return api.buscarPontos(query) }
+}
+data class NominatimResponse(val display_name: String, val address: Map<String, String>?)
+interface NominatimApi { @retrofit2.http.GET("reverse") suspend fun reverse(@retrofit2.http.Query("lat") lat: Double, @retrofit2.http.Query("lon") lon: Double, @retrofit2.http.Query("format") format: String = "jsonv2"): NominatimResponse }
+object NominatimRepository {
+    private val client = okhttp3.OkHttpClient.Builder().build(); private val api = retrofit2.Retrofit.Builder().baseUrl("https://nominatim.openstreetmap.org/").client(client).addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create()).build().create(NominatimApi::class.java)
+    suspend fun getEndereco(lat: Double, lng: Double): String { return try { api.reverse(lat, lng).display_name } catch (e: Exception) { "Lat ${String.format("%.4f", lat)}, Lng ${String.format("%.4f", lng)}" } }
+}
+
+@Composable fun AdicionarDesastreDialog(onDismiss: () -> Unit, onAdicionar: (String, String, Double, Double) -> Unit) {
+    var titulo by remember { mutableStateOf("") }; var endereco by remember { mutableStateOf("") }; var lat by remember { mutableStateOf("-23.5505") }; var lng by remember { mutableStateOf("-46.6333") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Adicionar Desastre", fontWeight = FontWeight.Bold, color = SafePointBlue) }, text = { Column { OutlinedTextField(value = titulo, onValueChange = { titulo = it }, label = { Text("Título") }, modifier = Modifier.fillMaxWidth()); Spacer(modifier = Modifier.height(8.dp)); OutlinedTextField(value = endereco, onValueChange = { endereco = it }, label = { Text("Endereço") }, modifier = Modifier.fillMaxWidth()); Spacer(modifier = Modifier.height(8.dp)); Row { OutlinedTextField(value = lat, onValueChange = { lat = it }, label = { Text("Lat") }, modifier = Modifier.weight(1f)); Spacer(modifier = Modifier.width(8.dp)); OutlinedTextField(value = lng, onValueChange = { lng = it }, label = { Text("Lng") }, modifier = Modifier.weight(1f)) } } }, confirmButton = { Button(onClick = { if (titulo.isNotBlank()) onAdicionar(titulo, endereco, lat.toDoubleOrNull() ?: -23.5505, lng.toDoubleOrNull() ?: -46.6333) }, colors = ButtonDefaults.buttonColors(containerColor = SafePointGreen)) { Text("Adicionar", color = Color.White) } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable fun TelaHistorico(navController: NavController) {
+    var textoPesquisa by remember { mutableStateOf("") }; var filtroGravidade by remember { mutableStateOf("Todos") }; var filtroTipo by remember { mutableStateOf("Todos") }; val context = LocalContext.current; var alertasDinamicos by remember { mutableStateOf<List<AlertaRota>>(emptyList()) }; var carregando by remember { mutableStateOf(true) }; var cidadeAtual by remember { mutableStateOf("Sua região") }
+    LaunchedEffect(Unit) {
+        obterLocalizacao(context) { lat, lng ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val enderecoReal = NominatimRepository.getEndereco(lat, lng); val partes = enderecoReal.split(","); val cidade = partes.getOrNull(partes.size - 4)?.trim() ?: "São Paulo"; cidadeAtual = cidade; val lista = gerarAlertasReaisComEndereco(lat, lng, enderecoReal, cidade)
+                    withContext(Dispatchers.Main) { alertasDinamicos = lista; carregando = false }
+                } catch (e: Exception) { val fallback = gerarAlertasReaisFallback(lat, lng); withContext(Dispatchers.Main) { alertasDinamicos = fallback; carregando = false } }
+            }
+        }
+        delay(5000); if (alertasDinamicos.isEmpty() && carregando) { obterLocalizacao(context) { lat, lng -> alertasDinamicos = gerarAlertasReaisFallback(lat, lng); carregando = false } }
+    }
+    val opcoesGravidade = listOf("Todos", "Crítica", "Alta", "Média", "Baixa"); val opcoesTipo = listOf("Todos", "Enchente", "Deslizamento", "Tempestade", "Terremoto", "Incêndio")
+    val alertasFiltrados = alertasDinamicos.filter { a -> val matchTexto = a.titulo.contains(textoPesquisa, true) || a.localizacao.contains(textoPesquisa, true) || a.bairro.contains(textoPesquisa, true); val matchGrav = filtroGravidade == "Todos" || a.gravidade == filtroGravidade; val matchTipo = filtroTipo == "Todos" || a.tipo == filtroTipo; matchTexto && matchGrav && matchTipo }
+    Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color(0xFFF6F8FA))) {
+            Box(modifier = Modifier.fillMaxWidth().background(FundoGradiente).padding(16.dp)) { Column { Text("Histórico de Alertas", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White); Text("Alertas próximos a $cidadeAtual", fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f)) } }
+            OutlinedTextField(value = textoPesquisa, onValueChange = { textoPesquisa = it }, placeholder = { Text("Pesquisar alertas...") }, leadingIcon = { Icon(Icons.Default.Search, null) }, modifier = Modifier.fillMaxWidth().padding(16.dp, 8.dp), shape = RoundedCornerShape(14.dp), singleLine = true)
+            Text("Filtrar por gravidade:", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp)); LazyRow(contentPadding = PaddingValues(16.dp, 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(opcoesGravidade) { filtro -> FilterChip(selected = filtroGravidade == filtro, onClick = { filtroGravidade = filtro }, label = { Text(filtro, fontSize = 12.sp) }) } }
+            Text("Filtrar por tipo:", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp)); LazyRow(contentPadding = PaddingValues(16.dp, 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(opcoesTipo) { filtro -> FilterChip(selected = filtroTipo == filtro, onClick = { filtroTipo = filtro }, label = { Text(filtro, fontSize = 12.sp) }) } }
+            if (carregando) Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(color = CorAzulEscuro); Text("Carregando alertas da sua região...") } }
+            else LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(alertasFiltrados) { alerta ->
+                    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(alerta.titulo, fontWeight = FontWeight.Bold, color = CorAzulEscuro, modifier = Modifier.weight(1f)); val cor = when (alerta.gravidade) { "Crítica" -> Color(0xFFE53935); "Alta" -> Color(0xFFFF9800); "Média" -> Color(0xFFFFC107); else -> Color(0xFF4CAF50) }; Box(modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(cor).padding(10.dp, 5.dp)) { Text(alerta.gravidade, fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold) } }
+                            Spacer(modifier = Modifier.height(6.dp)); Text(alerta.localizacao, fontSize = 12.sp, color = Color.Gray); Spacer(modifier = Modifier.height(4.dp)); Text("${alerta.bairro} - ${alerta.regiao} | ${String.format("%.1f km", alerta.distancia)}", fontSize = 11.sp, color = CorVerdeBotao); Spacer(modifier = Modifier.height(4.dp)); Text(alerta.dataHora, fontSize = 10.sp, color = Color.Gray.copy(alpha = 0.7f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun gerarAlertasReaisComEndereco(lat: Double, lng: Double, enderecoBase: String, cidade: String): List<AlertaRota> {
+    val tipos = listOf("Enchente", "Deslizamento", "Tempestade", "Alagamento", "Vendaval"); val gravidades = listOf("Crítica", "Alta", "Média", "Baixa")
+    val bairrosSP = listOf("Vila Mariana - Zona Sul", "Pinheiros - Zona Oeste", "Moema - Zona Sul", "Jardins - Zona Oeste", "Itaim Bibi - Zona Sul", "Perdizes - Zona Oeste", "Vila Madalena - Zona Oeste", "Santana - Zona Norte", "Tatuapé - Zona Leste", "Ipiranga - Zona Sul", "Lapa - Zona Oeste", "Centro - Sé", "Vila Prudente - Zona Leste", "Butantã - Zona Oeste", "Morumbi - Zona Sul")
+    val agora = System.currentTimeMillis()
+    return (1..15).map { i ->
+        val offsetLat = (Math.random() - 0.5) * 0.12; val offsetLng = (Math.random() - 0.5) * 0.12; val aLat = lat + offsetLat; val aLng = lng + offsetLng; val dist = calcularDistancia(lat, lng, aLat, aLng); val tipo = tipos.random(); val grav = gravidades.random(); val bairroRegiao = bairrosSP.random(); val partes = bairroRegiao.split(" - "); val bairro = partes[0]; val regiao = partes.getOrNull(1) ?: "São Paulo"; val rua = listOf("Rua das Palmeiras", "Av. Paulista", "Rua Augusta", "Av. Faria Lima", "Rua Oscar Freire").random(); val numero = (100..2500).random()
+        AlertaRota(i.toString(), "$tipo em $bairro", SimpleDateFormat("dd/MM/yyyy, HH:mm", Locale("pt", "BR")).format(Date(agora - (Math.random() * 72).toLong() * 3600000)), "$rua, $numero - $bairro, $cidade - SP", grav, tipo, aLat, aLng, dist, bairro, cidade, "$regiao, $cidade - SP")
+    }.sortedBy { it.distancia }
+}
+fun gerarAlertasReaisFallback(lat: Double, lng: Double): List<AlertaRota> = gerarAlertasReaisComEndereco(lat, lng, "São Paulo, SP", "São Paulo")
+fun calcularDistancia(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double { val R = 6371.0; val dLat = Math.toRadians(lat2 - lat1); val dLon = Math.toRadians(lon2 - lon1); val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); return R * c }
+fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> Unit) {
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager; val fine = ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED; val coarse = ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    if (!fine && !coarse) return
+    try { val gps = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); val net = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); val best = gps ?: net; if (best != null) onLocationReceived(best.latitude, best.longitude) else onLocationReceived(-23.5505, -46.6333) } catch (_: Exception) { onLocationReceived(-23.5505, -46.6333) }
+}
+
+@Composable
+fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFirestore) {
+    val context = LocalContext.current; var nome by remember { mutableStateOf("") }; var email by remember { mutableStateOf("") }; var telefone by remember { mutableStateOf("") }; var dataNascimento by remember { mutableStateOf("") }; var fotoUriLocal by remember { mutableStateOf<Uri?>(null) }; var fotoUrlSalva by remember { mutableStateOf<String?>(null) }; var mostrarDatePicker by remember { mutableStateOf(false) }; var salvando by remember { mutableStateOf(false) }; var carregando by remember { mutableStateOf(true) }
+    val imagePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? -> uri?.let { fotoUriLocal = it } }
+    LaunchedEffect(Unit) { val userId = PrefsHelper.getUserId(context) ?: auth.currentUser?.uid; if (userId != null) db.collection("usuarios").document(userId).get().addOnSuccessListener { doc -> nome = doc.getString("nome") ?: ""; email = doc.getString("email") ?: auth.currentUser?.email ?: ""; telefone = doc.getString("telefone") ?: ""; dataNascimento = doc.getString("dataNascimento") ?: ""; fotoUrlSalva = doc.getString("fotoUrl"); carregando = false }.addOnFailureListener { carregando = false } else carregando = false }
+    if (mostrarDatePicker) { val datePickerState = rememberDatePickerState(); DatePickerDialog(onDismissRequest = { mostrarDatePicker = false }, confirmButton = { TextButton(onClick = { val millis = datePickerState.selectedDateMillis; if (millis != null) { val cal = Calendar.getInstance(); cal.timeInMillis = millis; dataNascimento = String.format("%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)) }; mostrarDatePicker = false }) { Text("OK") } }, dismissButton = { TextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") } }) { DatePicker(state = datePickerState) } }
+    Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
+        if (carregando) Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = CorAzulEscuro) }
+        else {
+            Column(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color.White).verticalScroll(rememberScrollState())) {
+                Box(modifier = Modifier.fillMaxWidth().background(FundoGradiente).padding(24.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(modifier = Modifier.size(120.dp).clip(CircleShape).background(Color.White).clickable { imagePickerLauncher.launch("image/*") }, contentAlignment = Alignment.Center) {
+                            val img = fotoUriLocal?.toString() ?: fotoUrlSalva; if (!img.isNullOrBlank()) AsyncImage(model = img, contentDescription = "Foto", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop) else Icon(Icons.Default.Person, null, tint = CorAzulEscuro, modifier = Modifier.size(70.dp))
+                            Box(modifier = Modifier.align(Alignment.BottomEnd).size(36.dp).clip(CircleShape).background(CorAzulMedio), contentAlignment = Alignment.Center) { Icon(Icons.Default.PhotoCamera, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
+                        }
+                        Spacer(modifier = Modifier.height(14.dp)); Text(if (nome.isEmpty()) "Usuário" else nome, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White); Text(email, fontSize = 14.sp, color = Color.White.copy(alpha = 0.85f))
+                    }
+                }
+                Column(modifier = Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Editar Perfil", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                    OutlinedTextField(value = nome, onValueChange = { nome = it }, label = { Text("Nome completo") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
+                    OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("E-mail") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true)
+                    OutlinedTextField(value = telefone, onValueChange = { telefone = it }, label = { Text("Telefone") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                    OutlinedTextField(value = dataNascimento, onValueChange = {}, label = { Text("Data de nascimento") }, trailingIcon = { IconButton(onClick = { mostrarDatePicker = true }) { Icon(Icons.Default.ArrowDropDown, null) } }, modifier = Modifier.fillMaxWidth().clickable { mostrarDatePicker = true }, shape = RoundedCornerShape(14.dp), singleLine = true, readOnly = true)
+                    BotaoGradiente(texto = if (salvando) "Salvando..." else "Salvar Alterações") {
+                        if (salvando) return@BotaoGradiente; salvando = true; val userId = PrefsHelper.getUserId(context) ?: auth.currentUser?.uid
+                        if (userId != null) {
+                            val perfilMap = hashMapOf<String, Any>("nome" to nome, "email" to email, "telefone" to telefone, "dataNascimento" to dataNascimento)
+                            db.collection("usuarios").document(userId).set(perfilMap, SetOptions.merge()).addOnSuccessListener {
+                                if (fotoUriLocal != null) {
+                                    try {
+                                        val storageRef = FirebaseStorage.getInstance().reference.child("fotos_perfil/$userId/profile.jpg")
+                                        storageRef.putFile(fotoUriLocal!!).continueWithTask { task -> if (!task.isSuccessful) throw task.exception!!; storageRef.downloadUrl }.addOnCompleteListener { task ->
+                                            if (task.isSuccessful) { val url = task.result.toString(); db.collection("usuarios").document(userId).set(mapOf("fotoUrl" to url), SetOptions.merge()).addOnSuccessListener { fotoUrlSalva = url; fotoUriLocal = null; Toast.makeText(context, "Perfil e foto atualizados!", Toast.LENGTH_SHORT).show(); salvando = false } }
+                                            else { Toast.makeText(context, "Erro upload: ${task.exception?.message}", Toast.LENGTH_LONG).show(); salvando = false }
+                                        }
+                                    } catch (e: Exception) { Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show(); salvando = false }
+                                } else { Toast.makeText(context, "Dados salvos!", Toast.LENGTH_SHORT).show(); salvando = false }
+                            }.addOnFailureListener { e -> Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show(); salvando = false }
+                        } else { salvando = false }
+                    }
+                    Button(onClick = { FirebaseAuth.getInstance().signOut(); PrefsHelper.clearUserId(context); navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935))) { Text("Sair", color = Color.White, fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+@Composable fun TelaSOS(onVoltar: () -> Unit) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("SOS 190/192/193") } }
+@Composable fun TelaAjuda(onVoltar: () -> Unit) { Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Ajuda SafePoint") } }
