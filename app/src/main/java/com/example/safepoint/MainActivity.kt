@@ -1054,7 +1054,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                         val userId = PrefsHelper.getUserId(context) ?: auth.currentUser?.uid
                         if (userId != null) {
                             // Salva dados do perfil primeiro
-                            val perfil = hashMapOf("nome" to nome, "email" to email, "telefone" to telefone, "dataNascimento" to dataNascimento, "fotoUrl" to (fotoUrlSalva ?: ""))
+                            val perfil: Map<String, Any?> = hashMapOf("nome" to nome, "email" to email, "telefone" to telefone, "dataNascimento" to dataNascimento, "fotoUrl" to (fotoUrlSalva ?: ""))
                             db.collection("usuarios").document(userId).set(perfil).addOnSuccessListener {
                                 Toast.makeText(context, "Dados salvos com sucesso!", Toast.LENGTH_SHORT).show()
                                 // Tenta upload da foto se houver nova
@@ -1063,7 +1063,7 @@ fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFir
                                         val storageRef = FirebaseStorage.getInstance().reference.child("fotos_perfil/$userId.jpg")
                                         storageRef.putFile(fotoUriLocal!!).addOnSuccessListener {
                                             storageRef.downloadUrl.addOnSuccessListener { uri ->
-                                                val perfilComFoto = hashMapOf("fotoUrl" to uri.toString())
+                                                val perfilComFoto: Map<String, Any?> = hashMapOf("fotoUrl" to uri.toString())
                                                 db.collection("usuarios").document(userId).update(perfilComFoto).addOnSuccessListener {
                                                     fotoUrlSalva = uri.toString()
                                                     fotoUriLocal = null
