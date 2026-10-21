@@ -1,5 +1,5 @@
 plugins {
-    // SEM versão aqui - a versão vem do build.gradle.kts da raiz (8.13.0)
+    
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -71,7 +71,6 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.multidex:multidex:2.0.1")
 
-    // Firebase BOM único - sem duplicar versões
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
