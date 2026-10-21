@@ -1493,3 +1493,199 @@ fun salvarPerfil(
             onFim(false)
         }
 }
+
+// ================= TELA HISTÓRICO DINÂMICO =================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TelaHistorico(navController: NavController) {
+    var textoPesquisa by remember { mutableStateOf("") }
+    var filtroGravidade by remember { mutableStateOf("Todos") }
+    var filtroTipo by remember { mutableStateOf("Todos") }
+    val context = LocalContext.current
+    var localizacaoUsuario by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var alertasDinamicos by remember { mutableStateOf<List<AlertaRota>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        obterLocalizacao(context) { lat, lng ->
+            localizacaoUsuario = Pair(lat, lng)
+            alertasDinamicos = gerarAlertasDinamicos(lat, lng)
+        }
+    }
+
+    val opcoesGravidade = listOf("Todos", "Crítica", "Alta", "Média", "Baixa")
+    val opcoesTipo = listOf("Todos", "Enchente", "Deslizamento", "Tempestade", "Terremoto", "Incêndio")
+
+    val alertasFiltrados = alertasDinamicos.filter { alerta ->
+        val matchTexto = alerta.titulo.contains(textoPesquisa, ignoreCase = true) ||
+                alerta.localizacao.contains(textoPesquisa, ignoreCase = true)
+        val matchGravidade = filtroGravidade == "Todos" || alerta.gravidade == filtroGravidade
+        val matchTipo = filtroTipo == "Todos" || alerta.tipo == filtroTipo
+        matchTexto && matchGravidade && matchTipo
+    }
+
+    Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color(0xFFF6F8FA))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(FundoGradiente)
+                    .padding(16.dp)
+            ) {
+                Text("Histórico de Alertas", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+
+            OutlinedTextField(
+                value = textoPesquisa,
+                onValueChange = { textoPesquisa = it },
+                placeholder = { Text("Pesquisar alertas...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(14.dp),
+                singleLine = true
+            )
+
+            Text("Filtrar por gravidade:", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp))
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(opcoesGravidade) { filtro ->
+                    FilterChip(
+                        selected = filtroGravidade == filtro,
+                        onClick = { filtroGravidade = filtro },
+                        label = { Text(filtro, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = CorAzulEscuro,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            Text("Filtrar por tipo:", fontSize = 13.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp))
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(opcoesTipo) { filtro ->
+                    FilterChip(
+                        selected = filtroTipo == filtro,
+                        onClick = { filtroTipo = filtro },
+                        label = { Text(filtro, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = CorVerdeBotao,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (alertasDinamicos.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = CorAzulEscuro)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Carregando alertas da sua região...", color = Color.Gray)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(alertasFiltrados) { alerta ->
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        alerta.titulo,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = CorAzulEscuro,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    val corGravidade = when (alerta.gravidade) {
+                                        "Crítica" -> Color(0xFFE53935)
+                                        "Alta" -> Color(0xFFFF9800)
+                                        "Média" -> Color(0xFFFFC107)
+                                        "Baixa" -> Color(0xFF4CAF50)
+                                        else -> Color.Gray
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(corGravidade)
+                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            alerta.gravidade,
+                                            fontSize = 12.sp,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("Tipo: ${alerta.tipo}", fontSize = 13.sp, color = CorAzulMedio, fontWeight = FontWeight.Medium)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(alerta.localizacao, fontSize = 13.sp, color = Color.Gray)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Distância: ${String.format("%.1f", alerta.distancia)} km", fontSize = 12.sp, color = CorVerdeBotao)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(alerta.dataHora, fontSize = 12.sp, color = Color.Gray.copy(alpha = 0.7f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ================= GERAR ALERTAS DINÂMICOS =================
+fun gerarAlertasDinamicos(lat: Double, lng: Double): List<AlertaRota> {
+    val tiposDesastre = listOf("Enchente", "Deslizamento", "Tempestade", "Terremoto", "Incêndio")
+    val gravidades = listOf("Crítica", "Alta", "Média", "Baixa")
+    val agora = System.currentTimeMillis()
+    
+    return (1..8).map { i ->
+        val offsetLat = (Math.random() - 0.5) * 0.1
+        val offsetLng = (Math.random() - 0.5) * 0.1
+        val alertaLat = lat + offsetLat
+        val alertaLng = lng + offsetLng
+        val distancia = calcularDistancia(lat, lng, alertaLat, alertaLng)
+        val tipo = tiposDesastre.random()
+        val gravidade = gravidades.random()
+        val horasAtras = (Math.random() * 48).toInt()
+        val dataHora = SimpleDateFormat("dd/MM/yyyy, HH:mm", Locale.getDefault()).format(Date(agora - horasAtras * 3600000))
+        
+        AlertaRota(
+            id = i.toString(),
+            titulo = "$tipo - Região ${String.format("%.2f", alertaLat)}, ${String.format("%.2f", alertaLng)}",
+            dataHora = dataHora,
+            localizacao = "Próximo à sua localização",
+            gravidade = gravidade,
+            tipo = tipo,
+            latitude = alertaLat,
+            longitude = alertaLng,
+            distancia = distancia
+        )
+    }.sortedBy { it.distancia }
+}
+
