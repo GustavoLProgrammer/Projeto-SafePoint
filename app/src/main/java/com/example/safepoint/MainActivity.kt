@@ -99,6 +99,7 @@ data class AlertaRota(
 
 // ================= SCREENS =================
 sealed class Screen(val route: String) {
+    object Termos : Screen("termos")
     object Login : Screen("login")
     object Cadastro : Screen("cadastro")
     object RecuperarSenha : Screen("recuperar_senha")
@@ -125,6 +126,13 @@ object PrefsHelper {
     fun clearUserId(context: Context) {
         getPrefs(context).edit().remove("user_id").apply()
     }
+
+    fun isTermosAceitos(context: Context): Boolean =
+        getPrefs(context).getBoolean("termos_aceitos", false)
+
+    fun setTermosAceitos(context: Context, aceito: Boolean) {
+        getPrefs(context).edit().putBoolean("termos_aceitos", aceito).apply()
+    }
 }
 
 // ================= MAIN ACTIVITY =================
@@ -147,24 +155,42 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val navController = rememberNavController()
+                val context = LocalContext.current
+                val termosAceitos = PrefsHelper.isTermosAceitos(context)  
                 val currentUser = auth.currentUser
-                val startDest = if (currentUser != null) Screen.Home.route else Screen.Login.route
+                val startDest = when {
+            !termosAceitos -> Screen.Termos.route
+            currentUser == null -> Screen.Login.route
+            else -> Screen.Home.route
+                }
 
                 NavHost(navController = navController, startDestination = startDest) {
-                    composable(Screen.Login.route) { TelaLogin(navController, auth) }
-                    composable(Screen.Cadastro.route) { TelaCadastro(navController, auth) }
-                    composable(Screen.RecuperarSenha.route) { TelaRecuperarSenha(navController, auth) }
-                    composable(Screen.Home.route) { TelaHome(navController) }
-                    composable(Screen.Mapa.route) { TelaMapa(navController) }
-                    composable(Screen.Historico.route) { TelaHistorico(navController) }
-                    composable(Screen.Perfil.route) { TelaPerfil(navController, auth, db) }
-                    composable(Screen.SOS.route) { TelaSOS(onVoltar = { navController.popBackStack() }) }
-                    composable(Screen.Ajuda.route) { TelaAjuda(onVoltar = { navController.popBackStack() }) }
+    composable(Screen.Termos.route) {
+        TelaTermosUso(
+            onAceitar = {
+                PrefsHelper.setTermosAceitos(context, true)
+                if (currentUser != null) {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Termos.route) { inclusive = true }
+                    }
+                } else {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Termos.route) { inclusive = true }
+                    }
                 }
             }
-        }
+        )
     }
-}
+    composable(Screen.Login.route) { TelaLogin(navController, auth) }
+    composable(Screen.Cadastro.route) { TelaCadastro(navController, auth) }
+    composable(Screen.RecuperarSenha.route) { TelaRecuperarSenha(navController, auth) }
+    composable(Screen.Home.route) { TelaHome(navController) }
+    composable(Screen.Mapa.route) { TelaMapa(navController) }
+    composable(Screen.Historico.route) { TelaHistorico(navController) }
+    composable(Screen.Perfil.route) { TelaPerfil(navController, auth, db) }
+    composable(Screen.SOS.route) { TelaSOS(onVoltar = { navController.popBackStack() }) }
+    composable(Screen.Ajuda.route) { TelaAjuda(onVoltar = { navController.popBackStack() }) }
+                }
 
 // ================= LOGO PIN (Login e Recuperar Senha) =================
 @Composable
@@ -1454,5 +1480,46 @@ if (mostrarDatePicker) {
                 }
             }
         }
+    }
+}
+
+// ================= TELA TERMOS DE USO =================
+@Composable
+fun TelaTermosUso(onAceitar: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(FundoGradiente)
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+        LogoPinSafepoint()
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text("Termos de Uso e Privacidade", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("1. Coleta de Dados", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                Text("Coletamos sua localização GPS para calcular rotas de evacuação seguras.", fontSize = 13.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("2. Privacidade", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                Text("Seus dados pessoais são armazenados de forma criptografada e segura.", fontSize = 13.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("3. SOS e Emergência", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = CorAzulEscuro)
+                Text("O botão SOS aciona os serviços de emergência (190, 192, 193).", fontSize = 13.sp, color = Color.Gray)
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        BotaoGradiente(texto = "Aceitar e Continuar") {
+            onAceitar()
+        }
+        Spacer(modifier = Modifier.height(40.dp))
     }
 }
