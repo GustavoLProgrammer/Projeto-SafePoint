@@ -71,7 +71,7 @@ dependencies {
     // ===== FIREBASE =====
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation("com.google.firebase:firebase-auth:22.3.1")
-    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-firestore:24.10.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
     implementation("com.google.firebase:firebase-storage:20.3.0")
 
@@ -85,5 +85,6 @@ dependencies {
     // Retrofit para chamadas HTTP
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
 
