@@ -143,8 +143,11 @@ class MainActivity : ComponentActivity() {
         try { FirebaseApp.initializeApp(this) } catch (_: Exception) {}
         try {
             val ctx = applicationContext
-            Configuration.getInstance().userAgentValue = "SafePoint/1.2 (Android app; https://github.com/GustavoLProgrammer/Projeto-SafePoint; contato: gu45363@gmail.com)"
             Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid_prefs", Context.MODE_PRIVATE))
+            // A identificação precisa ser definida DEPOIS de carregar as preferências, para não ser sobrescrita.
+            Configuration.getInstance().userAgentValue = "SafePoint/1.3 (Android; ${ctx.packageName}; https://github.com/GustavoLProgrammer/Projeto-SafePoint)"
+            // Respeita o limite de concorrência recomendado para o servidor público de tiles.
+            Configuration.getInstance().tileDownloadThreads = 2
             Configuration.getInstance().osmdroidBasePath = ctx.getExternalFilesDir(null)
             Configuration.getInstance().osmdroidTileCache = ctx.getExternalFilesDir("osmdroid_tiles")
         } catch (_: Exception) {}
@@ -521,72 +524,110 @@ object SafePointDemoData {
         CidadeDemo("Canoas", "RS", -29.9178, -51.1836, listOf("canoas")),
         CidadeDemo("Ponta Grossa", "PR", -25.0916, -50.1668, listOf("ponta grossa")),
         CidadeDemo("Chapecó", "SC", -27.1004, -52.6152, listOf("chapeco")),
-        CidadeDemo("Rio Grande", "RS", -32.0350, -52.0986, listOf("rio grande"))
+        CidadeDemo("Rio Grande", "RS", -32.0350, -52.0986),
+        // Bairros e distritos da capital paulista para pesquisa em escala local
+        CidadeDemo("Vila Prudente", "SP", -23.5842, -46.5817, listOf("vila prudente sao paulo", "vila prudente, sao paulo")),
+        CidadeDemo("Tucuruvi", "SP", -23.4808, -46.6039, listOf("tucuruvi sao paulo", "tucuruvi, sao paulo")),
+        CidadeDemo("Mooca", "SP", -23.5609, -46.5995, listOf("mooca sao paulo", "mooca, sao paulo")),
+        CidadeDemo("Tatuapé", "SP", -23.5407, -46.5763, listOf("tatuape sao paulo", "tatuape, sao paulo")),
+        CidadeDemo("Pinheiros", "SP", -23.5676, -46.7017, listOf("pinheiros sao paulo", "pinheiros, sao paulo")),
+        CidadeDemo("Itaquera", "SP", -23.5408, -46.4567, listOf("itaquera sao paulo", "itaquera, sao paulo")),
+        CidadeDemo("Santo Amaro", "SP", -23.6542, -46.7108, listOf("santo amaro sao paulo", "santo amaro, sao paulo")),
+        CidadeDemo("Lapa", "SP", -23.5227, -46.7064, listOf("lapa sao paulo", "lapa, sao paulo")),
+        CidadeDemo("New York", "NY", 40.7128, -74.0060, listOf("new york city", "nova york", "manhattan")),
+        CidadeDemo("Los Angeles", "CA", 34.0522, -118.2437, listOf("los angeles california")),
+        CidadeDemo("Toronto", "ON", 43.6532, -79.3832),
+        CidadeDemo("Mexico City", "CDMX", 19.4326, -99.1332, listOf("cidade do mexico")),
+        CidadeDemo("London", "UK", 51.5072, -0.1276, listOf("londres")),
+        CidadeDemo("Paris", "FR", 48.8566, 2.3522),
+        CidadeDemo("Berlin", "DE", 52.5200, 13.4050, listOf("berlim")),
+        CidadeDemo("Madrid", "ES", 40.4168, -3.7038),
+        CidadeDemo("Rome", "IT", 41.9028, 12.4964, listOf("roma")),
+        CidadeDemo("Cairo", "EG", 30.0444, 31.2357),
+        CidadeDemo("Lagos", "NG", 6.5244, 3.3792),
+        CidadeDemo("Nairobi", "KE", -1.2921, 36.8219),
+        CidadeDemo("Cape Town", "ZA", -33.9249, 18.4241, listOf("cidade do cabo")),
+        CidadeDemo("Dubai", "AE", 25.2048, 55.2708),
+        CidadeDemo("Mumbai", "IN", 19.0760, 72.8777, listOf("bombaim")),
+        CidadeDemo("Delhi", "IN", 28.6139, 77.2090, listOf("nova delhi")),
+        CidadeDemo("Tokyo", "JP", 35.6762, 139.6503, listOf("toquio")),
+        CidadeDemo("Seoul", "KR", 37.5665, 126.9780, listOf("seul")),
+        CidadeDemo("Beijing", "CN", 39.9042, 116.4074, listOf("pequim")),
+        CidadeDemo("Singapore", "SG", 1.3521, 103.8198, listOf("singapura")),
+        CidadeDemo("Bangkok", "TH", 13.7563, 100.5018),
+        CidadeDemo("Jakarta", "ID", -6.2088, 106.8456),
+        CidadeDemo("Sydney", "AU", -33.8688, 151.2093),
+        CidadeDemo("Melbourne", "AU", -37.8136, 144.9631),
+        CidadeDemo("Auckland", "NZ", -36.8509, 174.7645),
+        CidadeDemo("Istanbul", "TR", 41.0082, 28.9784, listOf("istambul")),
+        CidadeDemo("Moscow", "RU", 55.7558, 37.6173, listOf("moscou")),
+        CidadeDemo("Buenos Aires", "AR", -34.6037, -58.3816),
+        CidadeDemo("Santiago", "CL", -33.4489, -70.6693),
+        CidadeDemo("Lima", "PE", -12.0464, -77.0428),
+        CidadeDemo("Bogotá", "CO", 4.7110, -74.0721, listOf("bogota")),
+        CidadeDemo("Quito", "EC", -0.1807, -78.4678)
     )
     val localInicial get() = cidades.first { it.nome == "São Paulo" }
     private val tipos = listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone")
     private val niveis = listOf("Baixa", "Média", "Alta", "Crítica")
-    val alertas: List<AlertaDemo> by lazy {
-        cidades.filter { it.nome != "Brasil" }.flatMapIndexed { index, city ->
-            (0 until 5).map { n ->
-                val dLat = (((index * 7 + n * 11) % 19) - 9) * 0.008
-                val dLng = (((index * 13 + n * 5) % 21) - 10) * 0.009
-                val tipo = tipos[(index + n * 2) % tipos.size]
-                val nivel = niveis[(index * 3 + n) % niveis.size]
-                AlertaDemo("demo-${index}-${n}", city.nome, tipo, nivel, (city.lat + dLat).coerceIn(-33.7, 5.3), (city.lng + dLng).coerceIn(-73.9, -34.7), when (tipo) {
-                    "Enchente" -> "Alagamento simulado em área urbana"; "Incêndio" -> "Foco de incêndio demonstrativo"; "Tempestade" -> "Tempestade severa simulada"; "Deslizamento" -> "Risco de encosta simulado"; "Seca" -> "Condição de seca demonstrativa"; else -> "Ventos fortes simulados"
-                }, "Demonstração • hoje")
+
+    // Cada localidade recebe no máximo dois alertas distintos. As descrições são naturais;
+    // a natureza acadêmica do conjunto permanece indicada discretamente na interface.
+    private fun criarDoisAlertas(local: CidadeDemo, prefixo: String = "local"): List<AlertaDemo> {
+        val seed = (local.nome.hashCode().toLong() * 31L + (local.lat * 10000).toLong() * 17L + (local.lng * 10000).toLong()).toInt()
+        val rng = kotlin.random.Random(seed)
+        val primeiroTipo = tipos[rng.nextInt(tipos.size)]
+        val segundoTipo = tipos[(tipos.indexOf(primeiroTipo) + 1 + rng.nextInt(tipos.size - 1)) % tipos.size]
+        return listOf(primeiroTipo, segundoTipo).mapIndexed { index, tipo ->
+            val angulo = rng.nextDouble(0.0, Math.PI * 2.0)
+            val distancia = rng.nextDouble(0.0025, 0.012)
+            val dLat = kotlin.math.cos(angulo) * distancia
+            val dLng = kotlin.math.sin(angulo) * distancia / kotlin.math.cos(Math.toRadians(local.lat)).coerceAtLeast(0.15)
+            val gravidade = niveis[Math.floorMod(seed + index * 2, niveis.size)]
+            val descricao = when (tipo) {
+                "Enchente" -> "Ponto de alagamento localizado após chuva intensa; acompanhe as condições da região."
+                "Incêndio" -> "Foco de incêndio reportado na área; evite aproximar-se do perímetro."
+                "Tempestade" -> "Condição de tempestade na região, com possibilidade de chuva forte e rajadas de vento."
+                "Deslizamento" -> "Área com possível instabilidade de encosta; evite trechos inclinados e áreas isoladas."
+                "Seca" -> "Condição de estiagem na região, com atenção para vegetação seca e uso de água."
+                else -> "Alerta de ventos intensos na região; procure local coberto e mantenha distância de estruturas instáveis."
             }
+            AlertaDemo("$prefixo-${seed}-$index", local.nome, tipo, gravidade,
+                (local.lat + dLat).coerceIn(-85.0, 85.0), (local.lng + dLng).coerceIn(-180.0, 180.0),
+                descricao, "Cenário acadêmico")
         }
+    }
+
+    val alertas: List<AlertaDemo> by lazy {
+        cidades.filter { it.nome != "Brasil" }.flatMap { criarDoisAlertas(it, "catalogo") }
     }
     val abrigos: List<AbrigoDemo> by lazy {
         cidades.filter { it.nome != "Brasil" }.flatMapIndexed { index, city ->
             listOf(
-                AbrigoDemo("abrigo-${index}-1", city.nome, "Ponto de apoio simulado • ${city.nome}", city.lat + 0.018, city.lng + 0.021),
-                AbrigoDemo("abrigo-${index}-2", city.nome, "Abrigo demonstrativo • ${city.nome}", city.lat - 0.022, city.lng - 0.016)
+                AbrigoDemo("abrigo-${index}-1", city.nome, "Ponto de apoio • ${city.nome}", city.lat + 0.018, city.lng + 0.021),
+                AbrigoDemo("abrigo-${index}-2", city.nome, "Local de apoio • ${city.nome}", city.lat - 0.022, city.lng - 0.016)
             )
         }
     }
-    fun normalizar(valor: String): String = java.text.Normalizer.normalize(valor.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").trim()
-    fun alertasAoRedor(nome: String, lat: Double, lng: Double, quantidade: Int = 28): List<AlertaDemo> {
-        val seed = (nome.hashCode().toLong() * 31L + (lat * 10000).toLong() * 17L + (lng * 10000).toLong()).toInt()
-        val rng = kotlin.random.Random(seed)
-        return (0 until quantidade).map { i ->
-            val angulo = rng.nextDouble(0.0, Math.PI * 2.0)
-            val distancia = rng.nextDouble(0.006, 0.22)
-            val tipo = tipos[rng.nextInt(tipos.size)]
-            val nivel = niveis[rng.nextInt(niveis.size)]
-            val detalhe = when (tipo) {
-                "Enchente" -> "Alagamento localizado de demonstração após chuva intensa"
-                "Incêndio" -> "Foco de incêndio de demonstração em área urbana"
-                "Tempestade" -> "Tempestade forte de demonstração na região"
-                "Deslizamento" -> "Possível instabilidade de encosta em cenário de demonstração"
-                "Seca" -> "Condição de seca de demonstração"
-                else -> "Ventos intensos de demonstração na região"
-            }
-            val dLat = kotlin.math.cos(angulo) * distancia
-            val dLng = kotlin.math.sin(angulo) * distancia / kotlin.math.cos(Math.toRadians(lat)).coerceAtLeast(0.15)
-            AlertaDemo("local-$seed-$i", nome, tipo, nivel, (lat + dLat).coerceIn(-85.0, 85.0), (lng + dLng).coerceIn(-180.0, 180.0), detalhe, "Agora • cenário de demonstração")
-        }
+    fun normalizar(valor: String): String = java.text.Normalizer.normalize(valor.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[,;]+"), " ").replace(Regex("\\s+"), " ").trim()
+    fun alertasAoRedor(nome: String, lat: Double, lng: Double, quantidade: Int = 2): List<AlertaDemo> {
+        val local = CidadeDemo(nome, "", lat, lng)
+        return criarDoisAlertas(local, "busca")
     }
     private val paisesGlobal = listOf("América do Norte", "América do Sul", "Europa", "África", "Ásia", "Oceania")
     val alertasGlobais: List<AlertaDemo> by lazy {
-        val rng = kotlin.random.Random(482910)
-        (0 until 420).map { i ->
-            val lat = rng.nextDouble(-60.0, 75.0)
-            val lng = rng.nextDouble(-179.0, 179.0)
-            val tipo = tipos[rng.nextInt(tipos.size)]
-            val nivel = niveis[rng.nextInt(niveis.size)]
-            val descricao = when (tipo) {
-                "Enchente" -> "Alagamento em área urbana (cenário demonstrativo)"
-                "Incêndio" -> "Foco de incêndio (cenário demonstrativo)"
-                "Tempestade" -> "Tempestade intensa (cenário demonstrativo)"
-                "Deslizamento" -> "Risco de deslizamento (cenário demonstrativo)"
-                "Seca" -> "Condição de seca (cenário demonstrativo)"
-                else -> "Ventos intensos (cenário demonstrativo)"
-            }
-            AlertaDemo("world-$i", paisesGlobal[(i % paisesGlobal.size)], tipo, nivel, lat, lng, descricao, "Cenário global • demonstração")
-        }
+        // Duas ocorrências distintas por localidade em cidades distribuídas mundialmente.
+        cidades.filter { it.nome != "Brasil" }.flatMap { criarDoisAlertas(it, "global") }
+    }
+    fun alertasDoBrasil(): List<AlertaDemo> {
+        val ufsBrasil = setOf("AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO")
+        val nomesBrasil = cidades.filter { it.uf in ufsBrasil }.map { it.nome }.toSet()
+        return alertasGlobais.filter { it.cidade in nomesBrasil }
+    }
+    fun alertasParaLocal(local: CidadeDemo): List<AlertaDemo> = when (normalizar(local.nome)) {
+        "mundo", "world", "global" -> alertasGlobais
+        "brasil", "brazil" -> alertasDoBrasil()
+        else -> alertasAoRedor(local.nome, local.lat, local.lng)
     }
 
     fun buscarLocal(query: String): CidadeDemo? {
@@ -671,7 +712,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var origem by remember { mutableStateOf(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)) }
     var gpsAtivo by remember { mutableStateOf(false) }
     var avisoBusca by remember { mutableStateOf("") }
-    var alertasDoLocal by remember { mutableStateOf(SafePointDemoData.alertasAoRedor(SafePointDemoSession.local.nome, SafePointDemoSession.local.lat, SafePointDemoSession.local.lng) + SafePointDemoData.alertasGlobais) }
+    var alertasDoLocal by remember { mutableStateOf(SafePointDemoData.alertasGlobais) }
     var locaisApoioReais by remember { mutableStateOf<List<AbrigoDemo>>(emptyList()) }
     var carregandoLocais by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -681,7 +722,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true }
         else Toast.makeText(context, "Localização não autorizada. Você ainda pode pesquisar qualquer local no mapa.", Toast.LENGTH_LONG).show()
     }
-    Configuration.getInstance().userAgentValue = "SafePoint Android/2.0 (com.example.safepoint)"
+    Configuration.getInstance().userAgentValue = "SafePoint/1.3 (Android; ${context.packageName}; https://github.com/GustavoLProgrammer/Projeto-SafePoint)"
     val mapView = remember {
         MapView(context.applicationContext).apply {
             setUseDataConnection(true)
@@ -712,7 +753,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         SafePointDemoSession.local = local
         selecionado = null; abrigoSelecionado = null; rotaPontos = emptyList(); rotaInfo = null
         origem = GeoPoint(local.lat, local.lng)
-        alertasDoLocal = SafePointDemoData.alertasGlobais + SafePointDemoData.alertasAoRedor(local.nome, local.lat, local.lng)
+        alertasDoLocal = SafePointDemoData.alertasParaLocal(local)
         mapView.controller.animateTo(GeoPoint(local.lat, local.lng))
         mapView.controller.setZoom(zoom)
         mapView.invalidate()
@@ -724,7 +765,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         if (textoBusca.isBlank()) { avisoBusca = "Digite uma rua, bairro, cidade, região ou país."; return }
         val consultaNormalizada = SafePointDemoData.normalizar(textoBusca)
         val local = SafePointDemoData.cidades.firstOrNull { SafePointDemoData.normalizar(it.nome) == consultaNormalizada || (it.uf.isNotBlank() && SafePointDemoData.normalizar("${it.nome}, ${it.uf}") == consultaNormalizada) }
-            ?: if (consultaNormalizada in setOf("mundo", "world", "global")) CidadeDemo("Mundo", "", 0.0, 0.0) else if (consultaNormalizada in setOf("brasil", "brazil")) SafePointDemoData.buscarLocal("Brasil") else null
+            ?: SafePointDemoData.buscarLocal(textoBusca)
+            ?: if (consultaNormalizada in setOf("mundo", "world", "global")) CidadeDemo("Mundo", "", 0.0, 0.0) else null
         if (local != null) {
             aplicarLocal(local, if (consultaNormalizada in setOf("mundo", "world", "global")) 2.0 else if (local.nome == "Brasil") 4.3 else 13.0)
             avisoBusca = "${local.nome}${if (local.uf.isNotBlank()) ", ${local.uf}" else ""} • pesquisa global"
@@ -790,7 +832,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
 
     LaunchedEffect(Unit) {
         // Localização GPS é opcional; o modo demonstrativo não depende dela.
-        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); carregarLocaisApoio(lat, lng); alertasDoLocal = SafePointDemoData.alertasGlobais + SafePointDemoData.alertasAoRedor("Sua região", lat, lng) }
+        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); carregarLocaisApoio(lat, lng); alertasDoLocal = SafePointDemoData.alertasAoRedor("Sua região", lat, lng) }
     }
     DisposableEffect(temPermissao) {
         if (!temPermissao) return@DisposableEffect onDispose { }
@@ -824,9 +866,9 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     Spacer(Modifier.width(9.dp))
                     Column(Modifier.weight(1f)) {
                         Text("SafePoint • Mapa", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("Mapa global • alertas de demonstração", color = Color(0xFFBCE8D7), fontSize = 11.sp)
+                        Text("Mapa global • modo acadêmico", color = Color(0xFFBCE8D7), fontSize = 11.sp)
                     }
-                    Surface(color = Color(0xFF6D2636), shape = RoundedCornerShape(8.dp)) { Text("DEMO", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) }
+                    Surface(color = Color(0xFF6D2636), shape = RoundedCornerShape(8.dp)) { Text("SIMULAÇÃO", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)) }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -834,7 +876,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     Spacer(Modifier.width(7.dp))
                     Button(onClick = { pesquisarLocal() }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D9A72))) { Icon(Icons.Default.Search, null); Text("Ir") }
                 }
-                Text(avisoBusca.ifBlank { "${cidadeSelecionada.nome}${if (cidadeSelecionada.uf.isNotBlank()) ", ${cidadeSelecionada.uf}" else ""} • ${alertasVisiveis.size} alertas no conjunto nacional" }, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
+                Text(avisoBusca.ifBlank { "${cidadeSelecionada.nome}${if (cidadeSelecionada.uf.isNotBlank()) ", ${cidadeSelecionada.uf}" else ""} • ${alertasVisiveis.size} alertas exibidos" }, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
             }
             // Filtros independentes e interativos
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -855,7 +897,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                         val marker = Marker(view).apply {
                             position = GeoPoint(a.lat, a.lng); title = "${a.tipo} • ${a.gravidade}"
                             val distanciaAlerta = calcularDistancia(origem.latitude, origem.longitude, a.lat, a.lng)
-                            snippet = "Cenário demonstrativo • ${a.cidade} — ${a.descricao} • ${formatarDistanciaKm(distanciaAlerta)} de você"
+                            snippet = "${a.cidade} — ${a.descricao} • ${formatarDistanciaKm(distanciaAlerta)} de você"
                             icon = criarPinoDesastreNivel(context, when (a.gravidade) { "Crítica" -> "Red"; "Alta" -> "Orange"; "Média" -> "Yellow"; else -> "Green" }, 48)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             setOnMarkerClickListener { _, _ -> selecionado = a; abrigoSelecionado = null; true }
@@ -878,7 +920,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble + 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Add, "Aumentar zoom", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble - 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Remove, "Diminuir zoom", tint = Color(0xFF0B2545)) }
-                    SmallFloatingActionButton(onClick = { if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); alertasDoLocal = SafePointDemoData.alertasGlobais + SafePointDemoData.alertasAoRedor("Sua região", lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
+                    SmallFloatingActionButton(onClick = { if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); alertasDoLocal = SafePointDemoData.alertasAoRedor("Sua região", lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.animateTo(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)); mapView.controller.setZoom(if (cidadeSelecionada.nome == "Brasil") 4.3 else 11.0); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.LocationOn, "Centralizar pesquisa", tint = Color(0xFF0B2545)) }
                 }
                 Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text("© OpenStreetMap contributors", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
@@ -896,7 +938,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(4.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(if (aSel != null) "${aSel.tipo} • ${aSel.cidade}" else abrSel!!.nome, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 14.sp)
-                        Text(if (aSel != null) "Cenário demonstrativo • ${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(calcularDistancia(origem.latitude, origem.longitude, aSel.lat, aSel.lng))} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
+                        Text(if (aSel != null) "${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(calcularDistancia(origem.latitude, origem.longitude, aSel.lat, aSel.lng))} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 7.dp)) {
                             listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) calcularRota(aSel.lat, aSel.lng, aSel.cidade) else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
                         }
@@ -1102,8 +1144,8 @@ object OsrmRepository {
     var filtroGravidade by remember { mutableStateOf("Todos") }
     var filtroTipo by remember { mutableStateOf("Todos") }
     var mostrarAbrigos by remember { mutableStateOf(false) }
-    var mensagem by remember { mutableStateOf("Pesquisa global • alertas de demonstração") }
-    var alertasHistorico by remember { mutableStateOf(SafePointDemoData.alertasAoRedor(cidadeAtual.nome, cidadeAtual.lat, cidadeAtual.lng) + SafePointDemoData.alertasGlobais.filter { calcularDistancia(cidadeAtual.lat, cidadeAtual.lng, it.lat, it.lng) <= 250.0 }) }
+    var mensagem by remember { mutableStateOf("Pesquisa global • modo acadêmico") }
+    var alertasHistorico by remember { mutableStateOf(SafePointDemoData.alertasParaLocal(cidadeAtual)) }
     var alertaExpandido by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val opcoesGravidade = listOf("Todos", "Crítica", "Alta", "Média", "Baixa")
@@ -1117,11 +1159,12 @@ object OsrmRepository {
         if (termo.isBlank()) { mensagem = "Digite uma rua, bairro, cidade, região ou país."; return }
         val termoNormalizado = SafePointDemoData.normalizar(termo)
         val local = SafePointDemoData.cidades.firstOrNull { SafePointDemoData.normalizar(it.nome) == termoNormalizado || (it.uf.isNotBlank() && SafePointDemoData.normalizar("${it.nome}, ${it.uf}") == termoNormalizado) }
-            ?: if (termoNormalizado in setOf("mundo", "world", "global")) CidadeDemo("Mundo", "", 0.0, 0.0) else if (termoNormalizado in setOf("brasil", "brazil")) SafePointDemoData.buscarLocal("Brasil") else null
+            ?: SafePointDemoData.buscarLocal(termo)
+            ?: if (termoNormalizado in setOf("mundo", "world", "global")) CidadeDemo("Mundo", "", 0.0, 0.0) else null
         if (local != null) {
             cidadeAtual = if (termoNormalizado in setOf("mundo", "world", "global")) CidadeDemo("Mundo", "", 0.0, 0.0) else local
             val foco = cidadeAtual
-            alertasHistorico = if (foco.nome == "Mundo" || foco.nome == "Brasil") SafePointDemoData.alertasGlobais else SafePointDemoData.alertasAoRedor(foco.nome, foco.lat, foco.lng) + SafePointDemoData.alertasGlobais.filter { calcularDistancia(foco.lat, foco.lng, it.lat, it.lng) <= 250.0 }
+            alertasHistorico = SafePointDemoData.alertasParaLocal(foco)
             alertaExpandido = null
             mensagem = "${local.nome}${if (local.uf.isNotBlank()) ", ${local.uf}" else ""} • resultados da pesquisa global"
         } else {
@@ -1135,7 +1178,7 @@ object OsrmRepository {
                 } else {
                     val novo = CidadeDemo(r.display_name.substringBefore(","), "", lat, lng, listOf(termo))
                     cidadeAtual = novo
-                    alertasHistorico = SafePointDemoData.alertasAoRedor(novo.nome, lat, lng) + SafePointDemoData.alertasGlobais.filter { calcularDistancia(lat, lng, it.lat, it.lng) <= 250.0 }
+                    alertasHistorico = SafePointDemoData.alertasAoRedor(novo.nome, lat, lng)
                     alertaExpandido = null
                     mensagem = "${r.display_name} • resultados da pesquisa global"
                 }
@@ -1148,7 +1191,7 @@ object OsrmRepository {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.History, null, tint = Color(0xFF83E3B1), modifier = Modifier.size(30.dp)); Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) { Text("Histórico de Alertas", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold); Text("Pesquisa global • ruas, bairros, cidades e países", color = Color(0xFFC9E8DF), fontSize = 11.sp) }
-                    Surface(color = Color(0xFF6D2636), shape = RoundedCornerShape(8.dp)) { Text("DEMO", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp, 5.dp)) }
+                    Surface(color = Color(0xFF6D2636), shape = RoundedCornerShape(8.dp)) { Text("SIMULAÇÃO", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(7.dp, 5.dp)) }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1180,7 +1223,8 @@ object OsrmRepository {
                             if (alertaExpandido == alerta.id) {
                                 Spacer(Modifier.height(8.dp)); Divider(color = Color(0xFFE4EAF0)); Spacer(Modifier.height(8.dp))
                                 Text("Descrição da ocorrência", color = Color(0xFF0B2545), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text(alerta.descricao + ". Este registro faz parte de um cenário de demonstração e não confirma uma ocorrência ativa neste endereço.", color = Color(0xFF526575), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                                Text(alerta.descricao, color = Color(0xFF526575), fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                                Text("Registro de simulação acadêmica — não representa confirmação de ocorrência ativa.", color = Color(0xFF8A3D28), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
                                 Text("Área: ${alerta.cidade} • Nível: ${alerta.gravidade} • Categoria: ${alerta.tipo}", color = Color(0xFF526575), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
                                 Button(onClick = { SafePointDemoSession.local = CidadeDemo(alerta.cidade, "", alerta.lat, alerta.lng); navController.navigate(Screen.Mapa.route) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1267A5))) { Icon(Icons.Default.Map, null); Spacer(Modifier.width(6.dp)); Text("Ver no mapa") }
                             } else Text("Toque para ver detalhes", color = Color(0xFF16845F), fontSize = 9.sp, modifier = Modifier.padding(top = 4.dp))
@@ -1188,7 +1232,7 @@ object OsrmRepository {
                     }
                 }
             }
-            Text("Alertas exibidos como cenários de demonstração. Locais de apoio vêm de dados públicos e não têm disponibilidade ou segurança garantidas.", modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 5.dp), textAlign = TextAlign.Center, color = Color(0xFF8A3D28), fontSize = 9.sp)
+            Text("Modo de simulação acadêmica. Locais de apoio vêm de dados públicos e precisam ser confirmados antes de uso real.", modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 5.dp), textAlign = TextAlign.Center, color = Color(0xFF8A3D28), fontSize = 9.sp)
         }
     }
 }
