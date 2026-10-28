@@ -685,7 +685,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             GeoPoint(lat1 + (destinoLat - lat1) * t + curva, lng1 + (destinoLng - lng1) * t - curva * 0.65)
         }
         selecionado = null; abrigoSelecionado = null
-        mapView.controller.zoomToBoundingBox(org.osmdroid.util.BoundingBox.fromGeoPoints(rotaPontos), true, 80)
+        mapView.zoomToBoundingBox(org.osmdroid.util.BoundingBox.fromGeoPoints(rotaPontos), true, 80)
         mapView.invalidate()
     }
 
