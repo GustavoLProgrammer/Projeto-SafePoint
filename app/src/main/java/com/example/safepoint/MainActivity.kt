@@ -461,7 +461,7 @@ fun MapaScreenProfissional(onVoltar: () -> Unit) {
 
     val tileSource = remember { XYTileSource("OpenStreetMap Standard", 0, 19, 256, ".png", arrayOf("https://tile.openstreetmap.org/"), "© OpenStreetMap contributors") }
     val mapView = remember { try { MapView(context.applicationContext).apply { setTileSource(tileSource); setMultiTouchControls(true); isTilesScaledToDpi = true; setUseDataConnection(true); controller.setZoom(4.5); controller.setCenter(GeoPoint(-14.2350, -51.9253)) } } catch (e: Exception) { MapView(context.applicationContext) } }
-    val myLocationOverlay = remember { try { MyLocationNewOverlay(GpsMyLocationProvider(context), mapView).apply { setPersonIcon(criarIconeLocalizacao((44 * context.resources.displayMetrics.density).toInt())); setDirectionArrow(criarIconeLocalizacao((44 * context.resources.displayMetrics.density).toInt())); enableMyLocation() } } catch (e: Exception) { null } }
+    val myLocationOverlay = remember { try { MyLocationNewOverlay(GpsMyLocationProvider(context), mapView).apply { enableMyLocation() } } catch (e: Exception) { null } }
 
     fun buscarPontosProximos(lat: Double, lng: Double) {
         CoroutineScope(Dispatchers.IO).launch {
@@ -914,7 +914,14 @@ object OsrmRepository {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(erroFonte.orEmpty(), fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Button(onClick = { localizacaoAtual?.let { carregarAlertas(it.first, it.second) } ?: if (buscaCidade.isNotBlank()) buscarPorCidadeDigitada(buscaCidade) }, enabled = !buscaEmAndamento) { Text("Tentar novamente") }
+                        Button(onClick = {
+                            val local = localizacaoAtual
+                            if (local != null) {
+                                carregarAlertas(local.first, local.second)
+                            } else if (buscaCidade.isNotBlank()) {
+                                buscarPorCidadeDigitada(buscaCidade)
+                            }
+                        }, enabled = !buscaEmAndamento) { Text("Tentar novamente") }
                     }
                 }
             }
