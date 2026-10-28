@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
         try { FirebaseApp.initializeApp(this) } catch (_: Exception) {}
         try {
             val ctx = applicationContext
-            Configuration.getInstance().userAgentValue = "SafePoint/1.0 (https://github.com/GustavoLProgrammer/Projeto-SafePoint; contato: gu45363@gmail.com)"
+            Configuration.getInstance().userAgentValue = "SafePoint/1.2 (Android app; https://github.com/GustavoLProgrammer/Projeto-SafePoint; contato: gu45363@gmail.com)"
             Configuration.getInstance().load(ctx, ctx.getSharedPreferences("osmdroid_prefs", Context.MODE_PRIVATE))
             Configuration.getInstance().osmdroidBasePath = ctx.getExternalFilesDir(null)
             Configuration.getInstance().osmdroidTileCache = ctx.getExternalFilesDir("osmdroid_tiles")
@@ -438,7 +438,7 @@ data class RotaInfo(val distanciaKm: Double, val duracaoMin: Int, val duracaoTex
 enum class ModoRota(val titulo: String, val valhallaCosting: String, val googleMode: String) {
     CARRO("Carro", "auto", "driving"), A_PE("A pé", "pedestrian", "walking"), BICICLETA("Bicicleta", "bicycle", "bicycling")
 }
-data class DesastreDetalhado(val ocorrencia: Ocorrencia, val alertLevel: String, val gravidade: String, val tipoCode: String, val nomeTipo: String)
+data class DesastreDetalhado(val ocorrencia: Ocorrencia, val alertLevel: String, val gravidade: String, val tipoCode: String, val nomeTipo: String, val fonte: String = "GDACS")
 
 @Composable
 fun MapaScreenProfissional(onVoltar: () -> Unit) {
@@ -463,9 +463,10 @@ fun MapaScreenProfissional(onVoltar: () -> Unit) {
         if (temPermissao) PrefsHelper.setLocalizacaoAceita(context, true)
     }
 
-    // Provedor Carto Voyager: estilo diferente e sem usar os servidores de tiles comunitários padrão do OSM.
-    // O mapa continua usando dados OSM, com atribuição visível ao provedor e aos contribuidores.
-    val tileSource = remember { XYTileSource("SafePoint Voyager", 0, 20, 256, ".png", arrayOf("https://basemaps.cartocdn.com/rastertiles/voyager/"), "© OpenStreetMap contributors © CARTO") }
+    // Mapa sem chave de API. Usa o endpoint oficial HTTPS do OpenStreetMap,
+    // com User-Agent identificável definido em MainActivity.onCreate e cache local do osmdroid.
+    // Atribuição visível obrigatória: © OpenStreetMap contributors.
+    val tileSource = remember { XYTileSource("SafePoint OpenStreetMap", 0, 19, 256, ".png", arrayOf("https://tile.openstreetmap.org/"), "© OpenStreetMap contributors") }
     val mapView = remember { try { MapView(context.applicationContext).apply { setTileSource(tileSource); setMultiTouchControls(true); isTilesScaledToDpi = true; setUseDataConnection(true); controller.setZoom(4.5); controller.setCenter(GeoPoint(-14.2350, -51.9253)) } } catch (e: Exception) { MapView(context.applicationContext) } }
     val myLocationOverlay = remember { try { MyLocationNewOverlay(GpsMyLocationProvider(context), mapView).apply { enableMyLocation() } } catch (e: Exception) { null } }
 
@@ -513,12 +514,26 @@ fun MapaScreenProfissional(onVoltar: () -> Unit) {
                                 val lon = feature.geometry.coordinates.getOrNull(0) ?: 0.0
                                 val lat = feature.geometry.coordinates.getOrNull(1) ?: 0.0
                                 val dist = calcularDistancia(ponto.latitude, ponto.longitude, lat, lon)
-                                if (dist <= 250.0) {
-                                    val grav = when (feature.properties.alertlevel) { "Red" -> "Crítica"; "Orange" -> "Alta"; "Green" -> "Média"; else -> "Baixa" }
+                                if (dist <= 500.0) {
+                                    val grav = when (feature.properties.alertlevel) { "Red" -> "Crítica"; "Orange" -> "Alta"; "Green" -> "Baixa"; else -> "Baixa" }
                                     val tipoNome = NOMES_DESASTRES[feature.properties.eventtype] ?: feature.properties.eventtype
                                     val oc = Ocorrencia("${tipoNome}: ${feature.properties.name}", "Alerta ${feature.properties.alertlevel} - ${feature.properties.name} | ${String.format("%.0f km de %s", dist, query)}", lat, lon, TipoOcorrencia.DESASTRE, feature.properties.eventtype)
-                                    desastresGlobais.add(DesastreDetalhado(oc, feature.properties.alertlevel, grav, feature.properties.eventtype, tipoNome))
+                                    desastresGlobais.add(DesastreDetalhado(oc, feature.properties.alertlevel, grav, feature.properties.eventtype, tipoNome, "GDACS"))
                                 }
+                            }
+                            if ("EQ" in filtrosDesastres) {
+                                try {
+                                    UsgsRepository.buscarUltimos30Dias().filter { it.magnitude >= 4.5 }.forEach { quake ->
+                                        val dist = calcularDistancia(ponto.latitude, ponto.longitude, quake.latitude, quake.longitude)
+                                        if (dist <= 500.0) {
+                                            val nivel = when { quake.magnitude >= 6.5 -> "Red"; quake.magnitude >= 5.0 -> "Orange"; else -> "Green" }
+                                            val gravidade = when (nivel) { "Red" -> "Crítica"; "Orange" -> "Alta"; else -> "Média" }
+                                            val nome = "Terremoto M${String.format(Locale.US, "%.1f", quake.magnitude)}: ${quake.nome}"
+                                            val oc = Ocorrencia(nome, "USGS • magnitude ${String.format(Locale.US, "%.1f", quake.magnitude)} • ${String.format(Locale("pt", "BR"), "%.0f km", dist)} da busca", quake.latitude, quake.longitude, TipoOcorrencia.DESASTRE, "EQ")
+                                            desastresGlobais.add(DesastreDetalhado(oc, nivel, gravidade, "EQ", "Terremoto", "USGS"))
+                                        }
+                                    }
+                                } catch (_: Exception) { /* mantém os eventos GDACS se o USGS estiver indisponível */ }
                             }
                         } catch (_: Exception) {}
                     }
@@ -637,10 +652,21 @@ fun MapaScreenProfissional(onVoltar: () -> Unit) {
             resposta.features.forEach { feature ->
                 val lon = feature.geometry.coordinates.getOrNull(0) ?: 0.0
                 val lat = feature.geometry.coordinates.getOrNull(1) ?: 0.0
-                val grav = when (feature.properties.alertlevel) { "Red" -> "Crítica"; "Orange" -> "Alta"; "Green" -> "Média"; else -> "Baixa" }
+                val grav = when (feature.properties.alertlevel) { "Red" -> "Crítica"; "Orange" -> "Alta"; "Green" -> "Baixa"; else -> "Baixa" }
                 val tipoNome = NOMES_DESASTRES[feature.properties.eventtype] ?: feature.properties.eventtype
                 val oc = Ocorrencia("$tipoNome: ${feature.properties.name}", "Alerta: ${feature.properties.alertlevel} - Evento real GDACS global", lat, lon, TipoOcorrencia.DESASTRE, feature.properties.eventtype)
-                desastresGlobais.add(DesastreDetalhado(oc, feature.properties.alertlevel, grav, feature.properties.eventtype, tipoNome))
+                desastresGlobais.add(DesastreDetalhado(oc, feature.properties.alertlevel, grav, feature.properties.eventtype, tipoNome, "GDACS"))
+            }
+            if ("EQ" in filtrosDesastres) {
+                try {
+                    UsgsRepository.buscarUltimos30Dias().filter { it.magnitude >= 4.5 }.forEach { quake ->
+                        val nivel = when { quake.magnitude >= 6.5 -> "Red"; quake.magnitude >= 5.0 -> "Orange"; else -> "Green" }
+                        val gravidade = when (nivel) { "Red" -> "Crítica"; "Orange" -> "Alta"; else -> "Média" }
+                        val nome = "Terremoto M${String.format(Locale.US, "%.1f", quake.magnitude)}: ${quake.nome}"
+                        val oc = Ocorrencia(nome, "USGS • magnitude ${String.format(Locale.US, "%.1f", quake.magnitude)} • últimos 30 dias", quake.latitude, quake.longitude, TipoOcorrencia.DESASTRE, "EQ")
+                        desastresGlobais.add(DesastreDetalhado(oc, nivel, gravidade, "EQ", "Terremoto", "USGS"))
+                    }
+                } catch (_: Exception) { /* se USGS falhar, os alertas GDACS continuam disponíveis */ }
             }
         } catch (_: Exception) {}
     }
@@ -761,7 +787,7 @@ fun MapaScreenProfissional(onVoltar: () -> Unit) {
                         Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)), shape = RoundedCornerShape(8.dp)) {
                             Column(modifier = Modifier.padding(10.dp)) {
                                 Text("⚠️ O que está acontecendo agora:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFFE65100))
-                                Text("Alerta ${desastreSelecionado!!.alertLevel} (${desastreSelecionado!!.gravidade}) publicado pela GDACS. Local: ${oc.titulo}. Distância aproximada da sua localização: ${String.format(Locale("pt", "BR"), "%.1f km", distanciaUser)}. A cobertura e a atualização variam por tipo de evento; confirme orientações com as autoridades locais.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 14.sp)
+                                Text("Fonte: ${desastreSelecionado!!.fonte}. Nível exibido: ${desastreSelecionado!!.gravidade}. Local: ${oc.titulo}. Distância aproximada: ${String.format(Locale("pt", "BR"), "%.1f km", distanciaUser)}. No USGS, o nível é uma classificação aproximada baseada na magnitude, não um alerta oficial. A cobertura varia; confirme com as autoridades locais.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 14.sp)
                             }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
@@ -819,55 +845,47 @@ data class GdacsResponse(val features: List<GdacsFeature>); data class GdacsFeat
 interface GdacsApi { @retrofit2.http.GET("gdacsapi/api/events/geteventlist/SEARCH") suspend fun getDesastres(@retrofit2.http.Query("eventlist") tipos: String = "EQ;TC;FL;VO;DR;WF", @retrofit2.http.Query("alertlevel") nivel: String = "Green;Orange;Red", @retrofit2.http.Query("limit") limite: Int = 500): GdacsResponse }
 object GdacsRepository { private val api = retrofit2.Retrofit.Builder().baseUrl("https://www.gdacs.org/").addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create()).build().create(GdacsApi::class.java); suspend fun buscarDesastres(tipos: String = "EQ;TC;FL;VO;DR;WF"): GdacsResponse = api.getDesastres(tipos = tipos) }
 
-// Previsão meteorológica diária real (Open-Meteo). Não é uma previsão de terremotos nem um aviso oficial de emergência.
-data class OpenMeteoResponse(val daily: OpenMeteoDaily? = null)
-data class OpenMeteoDaily(
-    val time: List<String>? = null,
-    val weather_code: List<Int?>? = null,
-    val temperature_2m_max: List<Double?>? = null,
-    val precipitation_probability_max: List<Int?>? = null,
-    val precipitation_sum: List<Double?>? = null,
-    val wind_speed_10m_max: List<Double?>? = null
-)
-data class PrevisaoRegional(
-    val data: String,
-    val codigoTempo: Int?,
-    val temperaturaMaxima: Double?,
-    val probabilidadeChuva: Int?,
-    val chuvaMm: Double?,
-    val ventoMaximo: Double?
-)
-interface OpenMeteoApi {
-    @retrofit2.http.GET("v1/forecast")
-    suspend fun previsao(
-        @retrofit2.http.Query("latitude") latitude: Double,
-        @retrofit2.http.Query("longitude") longitude: Double,
-        @retrofit2.http.Query("daily") daily: String = "weather_code,temperature_2m_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max",
-        @retrofit2.http.Query("timezone") timezone: String = "auto",
-        @retrofit2.http.Query("forecast_days") forecastDays: Int = 7
-    ): OpenMeteoResponse
+// Terremotos reais globais do USGS: últimos 30 dias, magnitude mínima 2,5.
+data class TerremotoGlobal(val nome: String, val latitude: Double, val longitude: Double, val magnitude: Double, val timestamp: Long)
+interface UsgsApi {
+    @retrofit2.http.GET("fdsnws/event/1/query")
+    suspend fun buscar(
+        @retrofit2.http.Query("format") format: String = "geojson",
+        @retrofit2.http.Query("starttime") starttime: String,
+        @retrofit2.http.Query("minmagnitude") minmagnitude: Double = 2.5,
+        @retrofit2.http.Query("orderby") orderby: String = "time",
+        @retrofit2.http.Query("limit") limit: Int = 200
+    ): okhttp3.ResponseBody
 }
-object OpenMeteoRepository {
+object UsgsRepository {
     private val client = okhttp3.OkHttpClient.Builder()
-        .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("User-Agent", "SafePoint/1.1 (weather forecast)").build()) }
+        .callTimeout(25, java.util.concurrent.TimeUnit.SECONDS)
+        .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("User-Agent", "SafePoint/1.2 (global earthquake alerts)").build()) }
         .build()
-    private val api = retrofit2.Retrofit.Builder().baseUrl("https://api.open-meteo.com/").client(client)
-        .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create()).build().create(OpenMeteoApi::class.java)
-    suspend fun buscarSemana(latitude: Double, longitude: Double): List<PrevisaoRegional> {
-        val daily = api.previsao(latitude, longitude).daily ?: return emptyList()
-        val datas = daily.time.orEmpty()
-        return datas.indices.map { i ->
-            PrevisaoRegional(
-                data = datas[i],
-                codigoTempo = daily.weather_code?.getOrNull(i),
-                temperaturaMaxima = daily.temperature_2m_max?.getOrNull(i),
-                probabilidadeChuva = daily.precipitation_probability_max?.getOrNull(i),
-                chuvaMm = daily.precipitation_sum?.getOrNull(i),
-                ventoMaximo = daily.wind_speed_10m_max?.getOrNull(i)
-            )
+    private val api = retrofit2.Retrofit.Builder().baseUrl("https://earthquake.usgs.gov/").client(client).build().create(UsgsApi::class.java)
+    suspend fun buscarUltimos30Dias(): List<TerremotoGlobal> {
+        val utc = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        val inicio = utc.format(Date(System.currentTimeMillis() - 30L * 24L * 60L * 60L * 1000L))
+        val raiz = org.json.JSONObject(api.buscar(starttime = inicio).string())
+        val features = raiz.optJSONArray("features") ?: return emptyList()
+        val resultado = mutableListOf<TerremotoGlobal>()
+        for (i in 0 until features.length()) {
+            val feature = features.optJSONObject(i) ?: continue
+            val props = feature.optJSONObject("properties") ?: continue
+            val coords = feature.optJSONObject("geometry")?.optJSONArray("coordinates") ?: continue
+            if (coords.length() < 2) continue
+            val lon = coords.optDouble(0, Double.NaN)
+            val lat = coords.optDouble(1, Double.NaN)
+            val mag = props.optDouble("mag", Double.NaN)
+            val time = props.optLong("time", 0L)
+            if (lat.isFinite() && lon.isFinite() && mag.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0 && time > 0L) {
+                resultado.add(TerremotoGlobal(props.optString("place", "Local não informado"), lat, lon, mag, time))
+            }
         }
+        return resultado
     }
 }
+
 data class OverpassResponse(val elements: List<OverpassElement>); data class OverpassElement(val type: String, val id: Long, val lat: Double? = null, val lon: Double? = null, val tags: Map<String, String>? = null, val center: OverpassCenter? = null); data class OverpassCenter(val lat: Double, val lon: Double)
 interface OverpassApi { @retrofit2.http.GET("api/interpreter") suspend fun buscarPontos(@retrofit2.http.Query("data") query: String): OverpassResponse }
 object OverpassRepository {
@@ -962,63 +980,70 @@ object OsrmRepository {
     var localizacaoAtual by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var buscaEmAndamento by remember { mutableStateOf(false) }
     var erroFonte by remember { mutableStateOf<String?>(null) }
-    var previsoesSemana by remember { mutableStateOf<List<PrevisaoRegional>>(emptyList()) }
-    var diaPrevisaoSelecionado by remember { mutableStateOf(0) }
-    var carregandoPrevisao by remember { mutableStateOf(false) }
-
-    fun carregarPrevisaoRegional(lat: Double, lng: Double) {
-        carregandoPrevisao = true
-        CoroutineScope(Dispatchers.IO).launch {
-            val resultado = try { OpenMeteoRepository.buscarSemana(lat, lng) } catch (_: Exception) { emptyList() }
-            withContext(Dispatchers.Main) {
-                previsoesSemana = resultado
-                diaPrevisaoSelecionado = 0
-                carregandoPrevisao = false
-            }
-        }
-    }
 
     fun carregarAlertas(lat: Double, lng: Double, cidadeNome: String? = null) {
-        previsoesSemana = emptyList()
-        diaPrevisaoSelecionado = 0
-        carregarPrevisaoRegional(lat, lng)
         carregando = true
         erroFonte = null
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val enderecoReal = try { NominatimRepository.getEndereco(lat, lng) } catch (e: Exception) { "" }
+                val enderecoReal = try { NominatimRepository.getEndereco(lat, lng) } catch (_: Exception) { "" }
                 val partes = enderecoReal.split(",")
-                val cidade = cidadeNome ?: partes.getOrNull(partes.size - 3)?.trim() ?: partes.getOrNull(partes.size - 4)?.trim() ?: "Sua região"
+                val cidade = cidadeNome ?: partes.getOrNull(partes.size - 3)?.trim() ?: partes.getOrNull(partes.size - 4)?.trim() ?: "Local pesquisado"
                 val gdacs = try { GdacsRepository.buscarDesastres() } catch (_: Exception) { null }
-                if (gdacs == null) {
+                val terremotos = try { UsgsRepository.buscarUltimos30Dias() } catch (_: Exception) { null }
+                if (gdacs == null && terremotos == null) {
                     withContext(Dispatchers.Main) {
-                        erroFonte = "Não foi possível conectar à fonte de alertas. Verifique a internet e tente novamente."
-                        alertasReais = emptyList()
-                        cidadeAtual = cidade
-                        enderecoAtualReal = enderecoReal
-                        carregando = false
-                        buscaEmAndamento = false
+                        erroFonte = "As fontes globais de alertas estão temporariamente indisponíveis. Verifique a internet e tente novamente."
+                        alertasReais = emptyList(); cidadeAtual = cidade; enderecoAtualReal = enderecoReal
+                        carregando = false; buscaEmAndamento = false
                     }
                     return@launch
                 }
                 val listaReal = mutableListOf<AlertaRota>()
-                gdacs.features.forEachIndexed { index, feature ->
-                    val fLon = feature.geometry.coordinates.getOrNull(0) ?: 0.0
-                    val fLat = feature.geometry.coordinates.getOrNull(1) ?: 0.0
+                gdacs?.features.orEmpty().forEach { feature ->
+                    val fLon = feature.geometry.coordinates.getOrNull(0) ?: Double.NaN
+                    val fLat = feature.geometry.coordinates.getOrNull(1) ?: Double.NaN
+                    if (fLat !in -90.0..90.0 || fLon !in -180.0..180.0) return@forEach
                     val dist = calcularDistancia(lat, lng, fLat, fLon)
-                    if (fLat in -90.0..90.0 && fLon in -180.0..180.0 && dist <= 250.0) {
-                        val grav = when (feature.properties.alertlevel) { "Red" -> "Crítica"; "Orange" -> "Alta"; "Green" -> "Média"; else -> "Não classificada" }
+                    if (dist <= 500.0) {
+                        val grav = when (feature.properties.alertlevel.lowercase(Locale.ROOT)) { "red" -> "Crítica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Não classificada" }
                         val tipo = NOMES_DESASTRES[feature.properties.eventtype] ?: "Evento de desastre"
                         val nomeFonte = feature.properties.name.ifBlank { tipo }
                         val endRealFeature = traduzirNomeEvento(nomeFonte, tipo)
-                        val dataPublicacao = formatarDataAlerta(feature.properties.pubDate)
-                        listaReal.add(AlertaRota(id = "gdacs-${feature.properties.eventid ?: "${feature.properties.eventtype}-$fLat-$fLon"}", titulo = "$tipo próximo de $cidade", dataHora = dataPublicacao, localizacao = endRealFeature, gravidade = grav, tipo = tipo, latitude = fLat, longitude = fLon, distancia = dist, bairro = nomeFonte, cidade = cidade, regiao = endRealFeature))
+                        listaReal.add(AlertaRota(
+                            id = "gdacs-${feature.properties.eventid ?: "${feature.properties.eventtype}-$fLat-$fLon"}",
+                            titulo = "$tipo próximo de $cidade", dataHora = formatarDataAlerta(feature.properties.pubDate),
+                            localizacao = endRealFeature, gravidade = grav, tipo = tipo, latitude = fLat, longitude = fLon,
+                            distancia = dist, bairro = "GDACS • evento publicado", cidade = cidade, regiao = endRealFeature
+                        ))
+                    }
+                }
+                terremotos.orEmpty().forEach { quake ->
+                    val dist = calcularDistancia(lat, lng, quake.latitude, quake.longitude)
+                    if (dist <= 500.0) {
+                        val grav = when { quake.magnitude >= 6.5 -> "Crítica"; quake.magnitude >= 5.0 -> "Alta"; quake.magnitude >= 4.0 -> "Média"; else -> "Baixa" }
+                        val mag = String.format(Locale("pt", "BR"), "%.1f", quake.magnitude)
+                        val data = SimpleDateFormat("dd/MM/yyyy HH:mm 'UTC'", Locale("pt", "BR")).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(quake.timestamp))
+                        listaReal.add(AlertaRota(
+                            id = "usgs-${quake.timestamp}-${quake.latitude}-${quake.longitude}",
+                            titulo = "Terremoto M$mag próximo de $cidade", dataHora = "$data • USGS",
+                            localizacao = quake.nome, gravidade = grav, tipo = "Terremoto", latitude = quake.latitude,
+                            longitude = quake.longitude, distancia = dist, bairro = "USGS • magnitude $mag",
+                            cidade = cidade, regiao = quake.nome
+                        ))
                     }
                 }
                 listaReal.sortBy { it.distancia }
-                withContext(Dispatchers.Main) { alertasReais = listaReal.sortedBy { it.distancia }.take(100); cidadeAtual = cidade; enderecoAtualReal = enderecoReal; carregando = false; buscaEmAndamento = false }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) { erroFonte = "Não foi possível carregar os alertas. Verifique a conexão e tente novamente."; carregando = false; buscaEmAndamento = false }
+                withContext(Dispatchers.Main) {
+                    alertasReais = listaReal.distinctBy { it.id }.take(200)
+                    cidadeAtual = cidade; enderecoAtualReal = enderecoReal
+                    carregando = false; buscaEmAndamento = false
+                }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    erroFonte = "Não foi possível carregar os alertas globais. Verifique a conexão e tente novamente."
+                    carregando = false; buscaEmAndamento = false
+                }
             }
         }
     }
@@ -1073,57 +1098,13 @@ object OsrmRepository {
             Box(modifier = Modifier.fillMaxWidth().background(FundoGradiente).statusBarsPadding().padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     Text("Histórico de Alertas", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text("Alertas publicados próximos de $cidadeAtual • raio de 250 km", fontSize = 12.sp, color = Color.White.copy(alpha = 0.88f))
+                    Text("Eventos publicados perto de $cidadeAtual • raio de 500 km", fontSize = 12.sp, color = Color.White.copy(alpha = 0.88f))
                     if (enderecoAtualReal.isNotBlank()) Text(enderecoAtualReal.take(70) + "...", fontSize = 10.sp, color = Color.White.copy(alpha = 0.6f))
                 }
             }
-            OutlinedTextField(value = buscaCidade, onValueChange = { buscaCidade = it }, placeholder = { Text("Pesquisar cidade ou região", fontSize = 12.sp) }, leadingIcon = { Icon(Icons.Default.Search, null, tint = azulEscuro) }, trailingIcon = { if (buscaCidade.isNotBlank()) IconButton(onClick = { buscarPorCidadeDigitada(buscaCidade) }) { Icon(Icons.Default.ArrowForward, null, tint = SafePointGreen) } }, modifier = Modifier.fillMaxWidth().padding(12.dp, 6.dp), shape = RoundedCornerShape(12.dp), singleLine = true)
+            OutlinedTextField(value = buscaCidade, onValueChange = { buscaCidade = it }, placeholder = { Text("Pesquisar rua, bairro, cidade ou país", fontSize = 12.sp) }, leadingIcon = { Icon(Icons.Default.Search, null, tint = azulEscuro) }, trailingIcon = { if (buscaCidade.isNotBlank()) IconButton(onClick = { buscarPorCidadeDigitada(buscaCidade) }) { Icon(Icons.Default.ArrowForward, null, tint = SafePointGreen) } }, modifier = Modifier.fillMaxWidth().padding(12.dp, 6.dp), shape = RoundedCornerShape(12.dp), singleLine = true)
             Text("Filtrar por gravidade:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)); LazyRow(contentPadding = PaddingValues(16.dp, 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(opcoesGravidade) { filtro -> FilterChip(selected = filtroGravidade == filtro, onClick = { filtroGravidade = filtro }, label = { Text(filtro, fontSize = 11.sp) }) } }
             Text("Filtrar por tipo:", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)); LazyRow(contentPadding = PaddingValues(16.dp, 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(opcoesTipo) { filtro -> FilterChip(selected = filtroTipo == filtro, onClick = { filtroTipo = filtro }, label = { Text(filtro, fontSize = 11.sp) }) } }
-            previsoesSemana.getOrNull(diaPrevisaoSelecionado)?.let { previsao ->
-                val probChuva = previsao.probabilidadeChuva
-                val chuvaMm = previsao.chuvaMm ?: 0.0
-                val vento = previsao.ventoMaximo ?: 0.0
-                val riscoChuvaForte = (probChuva ?: 0) >= 70 && chuvaMm >= 20.0
-                val riscoVento = vento >= 50.0
-                val riscoCalor = (previsao.temperaturaMaxima ?: 0.0) >= 35.0
-                val corRisco = if (riscoChuvaForte || riscoVento || riscoCalor) Color(0xFFB45309) else Color(0xFF155E75)
-                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(1.dp)) {
-                    Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.WbCloudy, contentDescription = null, tint = corRisco, modifier = Modifier.size(22.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Previsão meteorológica • próximos dias", fontWeight = FontWeight.Bold, color = azulEscuro, fontSize = 13.sp)
-                                Text("${cidadeAtual} • ${formatarDataPrevisao(previsao.data)}", fontSize = 10.sp, color = Color.Gray)
-                            }
-                            if (riscoChuvaForte || riscoVento || riscoCalor) {
-                                Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFFFF3E0)).padding(horizontal = 7.dp, vertical = 4.dp)) { Text("Atenção", fontSize = 10.sp, color = corRisco, fontWeight = FontWeight.Bold) }
-                            }
-                        }
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(previsoesSemana.indices.toList()) { indiceDia ->
-                            FilterChip(
-                                selected = diaPrevisaoSelecionado == indiceDia,
-                                onClick = { diaPrevisaoSelecionado = indiceDia },
-                                label = { Text(formatarDataPrevisao(previsoesSemana[indiceDia].data), fontSize = 10.sp) }
-                            )
-                        }
-                    }
-                    Text("Possibilidade de chuva: ${probChuva?.let { "$it%" } ?: "sem dado"} • Chuva prevista: ${String.format(Locale("pt", "BR"), "%.1f", chuvaMm)} mm", fontSize = 11.sp, color = Color(0xFF334155))
-                        Text("Máxima prevista: ${previsao.temperaturaMaxima?.let { String.format(Locale("pt", "BR"), "%.1f °C", it) } ?: "sem dado"} • Vento máximo: ${previsao.ventoMaximo?.let { String.format(Locale("pt", "BR"), "%.0f km/h", it) } ?: "sem dado"}", fontSize = 11.sp, color = Color(0xFF334155))
-                        val resumo = when {
-                            riscoChuvaForte -> "Previsão indica possibilidade de chuva intensa. Acompanhe avisos meteorológicos e da Defesa Civil."
-                            riscoVento -> "Previsão indica vento forte. Evite áreas expostas e acompanhe os avisos oficiais."
-                            riscoCalor -> "Previsão indica calor elevado. Consulte orientações locais de saúde e Defesa Civil."
-                            else -> "Os indicadores consultados não mostram os limites de atenção meteorológica usados pelo app. Isso não garante ausência de perigo."
-                        }
-                        Text(resumo, fontSize = 10.sp, color = Color.Gray, lineHeight = 14.sp)
-                        Text("Fonte: Open-Meteo • previsão, não alerta oficial. Terremotos não podem ser previstos por dia com confiabilidade científica.", fontSize = 9.sp, color = Color.Gray)
-                    }
-                }
-            }
-            if (carregandoPrevisao && previsoesSemana.isEmpty()) Text("Carregando previsão meteorológica…", fontSize = 10.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp))
             if (carregando) Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { CircularProgressIndicator(color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Consultando alertas publicados para a região selecionada…", fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp)) } }
             else if (erroFonte != null) {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f).padding(32.dp), contentAlignment = Alignment.Center) {
@@ -1151,7 +1132,7 @@ object OsrmRepository {
                         Icon(Icons.Default.CheckCircle, null, tint = SafePointGreen, modifier = Modifier.size(64.dp)); Spacer(modifier = Modifier.height(16.dp)); 
                         Text("Nenhum alerta real próximo", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = azulEscuro); 
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("A fonte consultada não retornou eventos dentro de 250 km de $cidadeAtual nos últimos registros disponíveis. Isso não garante ausência de perigo local; acompanhe também os avisos da Defesa Civil.", fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center) 
+                        Text("GDACS e USGS não retornaram eventos dentro de 500 km de $cidadeAtual nos dados consultados. Isso não significa ausência de perigo local: nem todos os incidentes são publicados nessas fontes. Consulte também a Defesa Civil e as autoridades locais.", fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center) 
                     } 
                 }
             }
@@ -1175,6 +1156,7 @@ object OsrmRepository {
                             }; 
                             Spacer(modifier = Modifier.height(4.dp)); Text(alerta.localizacao, fontSize = 11.sp, color = Color.Gray); Spacer(modifier = Modifier.height(3.dp)); 
                             Text("${alerta.cidade} | ${String.format(Locale("pt", "BR"), "%.1f km da região", alerta.distancia)} | ${alerta.tipo}", fontSize = 10.sp, color = CorVerdeBotao, fontWeight = FontWeight.Bold); 
+                            Spacer(modifier = Modifier.height(2.dp)); Text(alerta.bairro, fontSize = 9.sp, color = Color.Gray)
                             Spacer(modifier = Modifier.height(2.dp)); Text(alerta.dataHora, fontSize = 9.sp, color = Color.Gray.copy(alpha = 0.7f))
                         }
                     }
@@ -1182,13 +1164,6 @@ object OsrmRepository {
             }
         }
     }
-}
-
-fun formatarDataPrevisao(dataIso: String): String {
-    return try {
-        val data = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dataIso)
-        if (data != null) SimpleDateFormat("dd/MM/yyyy", Locale("pt", "BR")).format(data) else dataIso
-    } catch (_: Exception) { dataIso }
 }
 
 fun traduzirNomeEvento(nomeFonte: String, tipoPortuguese: String): String {
@@ -1366,7 +1341,7 @@ fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> U
         "Como filtrar hospitais e abrigos no mapa?" to "No topo do mapa há dois filtros: desastres (vermelho) e segurança (verde). Toque em 'Hospital', 'Bombeiros', 'Polícia', 'Abrigo' ou 'Farmácia' para mostrar apenas aquele tipo. Toque novamente para desfiltrar. Use o botão azul de localização para voltar para sua posição.",
         "Como usar o botão SOS?" to "Na tela inicial ou no menu, toque em 'Emergência SOS'. Escolha Polícia (190), SAMU (192), Bombeiros (193) ou Defesa Civil (199). Toque no card e o app abrirá o discador do celular com o número. Confirme a ligação. Você também pode compartilhar sua localização via WhatsApp.",
         "Como compartilhar minha localização?" to "Na tela SOS, toque em 'Compartilhar no WhatsApp'. O app pega sua localização exata via GPS e cria uma mensagem com link do Google Maps. Escolha o contato para enviar. Funciona mesmo sem internet no mapa, se o GPS estiver ativo.",
-        "Como ver meu histórico de alertas?" to "Toque em 'Histórico' na barra inferior. O app busca alertas reais da sua região usando sua localização exata + API GDACS (desastres globais). Você vê distância em km, gravidade (Crítica, Alta, Média) e endereço real via Nominatim. Use a busca e filtros por gravidade e tipo.",
+        "Como ver meu histórico de alertas?" to "Toque em 'Histórico' na barra inferior. O app busca alertas reais da sua região usando sua localização exata + API GDACS (desastres globais). Você vê distância em km, gravidade e localização geográfica via Nominatim. As fontes incluem GDACS e terremotos publicados pelo USGS; a cobertura varia por tipo de ocorrência. Use a busca e filtros por gravidade e tipo.",
         "Como editar meu perfil?" to "Toque em 'Perfil' na barra inferior. Toque na foto para trocar (escolha da galeria). Edite nome, e-mail, telefone e data de nascimento. Toque em 'Salvar Alterações'. Para sair da conta, toque em 'Sair'. Seus dados ficam salvos no Firebase com segurança.",
         "Preciso permitir localização?" to "Sim, é essencial. Sem localização, o mapa não mostra onde você está, não calcula rotas seguras e não encontra abrigos próximos. Na primeira vez, o app pede permissão. Se negar, vá em Configurações do celular > Apps > SafePoint > Permissões > Localização > Permitir sempre.",
         "O mapa está cinza ou não carrega?" to "Verifique: 1) Internet ativa, 2) Localização permitida, 3) GPS ligado. O mapa usa OSM HOT gratuito, sem API Key, então não deve dar 'API KEY REQUIRED'. Se ainda falhar, feche e abra o app. O app salva cache local para funcionar offline por um tempo.",
