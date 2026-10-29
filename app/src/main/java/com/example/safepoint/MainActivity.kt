@@ -294,6 +294,18 @@ fun LogoEscudoSafePoint(modifier: Modifier = Modifier) {
 @Composable
 fun TelaLoginOriginal(navController: NavController, auth: FirebaseAuth) {
     var email by remember { mutableStateOf("") }; var senha by remember { mutableStateOf("") }; var lembrarMe by remember { mutableStateOf(false) }; var senhaVisivel by remember { mutableStateOf(false) }; var entrando by remember { mutableStateOf(false) }; val context = LocalContext.current
+
+    // Evita que a interface fique presa indefinidamente se o Firebase não responder.
+    LaunchedEffect(entrando) {
+        if (entrando) {
+            delay(20000)
+            if (entrando) {
+                entrando = false
+                Toast.makeText(context, "O serviço de login não respondeu em 20 segundos. Verifique a internet e a configuração do Firebase.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(gradientFundoOriginal).statusBarsPadding()) {
         Card(shape = RoundedCornerShape(36.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(10.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(top = 48.dp, bottom = 28.dp).align(Alignment.Center)) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 30.dp)) {
@@ -312,41 +324,13 @@ fun TelaLoginOriginal(navController: NavController, auth: FirebaseAuth) {
                     Text(text = "Esqueci minha senha", color = azulLinhas, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { navController.navigate(Screen.RecuperarSenha.route) })
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(12.dp)).background(if (entrando) Brush.horizontalGradient(listOf(Color(0xFF6D86A8), Color(0xFF70A58C))) else gradientBotaoOriginal).clickable(enabled = !entrando) {
-                    when {
-                        email.isBlank() || senha.isBlank() -> Toast.makeText(context, "Preencha e-mail e senha!", Toast.LENGTH_SHORT).show()
-                        !android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() -> Toast.makeText(context, "Digite um e-mail válido.", Toast.LENGTH_SHORT).show()
-                        FirebaseApp.getApps(context).isEmpty() -> Toast.makeText(context, "Login não configurado: falta conectar o Firebase ao projeto.", Toast.LENGTH_LONG).show()
-                        else -> {
-                            entrando = true
-                            auth.signInWithEmailAndPassword(email.trim(), senha).addOnCompleteListener { task ->
-                                entrando = false
-                                if (task.isSuccessful) {
-                                    val userId = task.result.user?.uid
-                                    if (userId.isNullOrBlank()) Toast.makeText(context, "Não foi possível confirmar sua conta. Tente novamente.", Toast.LENGTH_LONG).show()
-                                    else { PrefsHelper.setUserId(context, userId); Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show(); navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } }
-                                } else {
-                                    val erro = task.exception?.message.orEmpty().lowercase(Locale.ROOT)
-                                    val mensagemErro = when {
-                                        erro.contains("network") -> "Sem conexão. Verifique a internet e tente novamente."
-                                        erro.contains("user-not-found") || erro.contains("invalid-credential") || erro.contains("wrong-password") -> "E-mail ou senha incorretos."
-                                        erro.contains("too-many-requests") -> "Muitas tentativas. Aguarde um pouco e tente novamente."
-                                        erro.contains("operation-not-allowed") -> "O login por e-mail ainda não está habilitado no Firebase."
-                                        erro.contains("configuration-not-found") || erro.contains("api key") -> "Configuração do Firebase incompleta neste projeto."
-                                        else -> "Não foi possível entrar agora. Confira a conexão e a configuração da conta."
-                                    }
-                                    Toast.makeText(context, mensagemErro, Toast.LENGTH_LONG).show()
-                                }
-                            }.addOnFailureListener {
-                                entrando = false
-                                Toast.makeText(context, "Falha ao conectar ao serviço de login. Tente novamente.", Toast.LENGTH_LONG).show()
-                            }
-                        }
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable {
+                    if (email.isBlank() || senha.isBlank()) Toast.makeText(context, "Preencha e-mail e senha!", Toast.LENGTH_SHORT).show()
+                    else auth.signInWithEmailAndPassword(email, senha).addOnCompleteListener { task ->
+                        if (task.isSuccessful) { PrefsHelper.setUserId(context, task.result.user?.uid ?: ""); Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show(); navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } }
+                        else Toast.makeText(context, "E-mail ou senha incorretos!", Toast.LENGTH_LONG).show()
                     }
-                }) {
-                    if (entrando) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text("Entrando...", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
-                    else Text("Entrar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
+                }) { Text("Entrar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
                 Spacer(modifier = Modifier.height(22.dp))
                 Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Text("Não tem uma conta? ", color = cinzaTexto, fontSize = 13.sp); Text(text = "Criar conta", color = azulLinhas, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { navController.navigate(Screen.Cadastro.route) })
