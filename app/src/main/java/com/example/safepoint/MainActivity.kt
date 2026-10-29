@@ -293,7 +293,7 @@ fun LogoEscudoSafePoint(modifier: Modifier = Modifier) {
 // TELAS LOGIN/CADASTRO ORIGINAIS COM CENTRALIZAÇÃO
 @Composable
 fun TelaLoginOriginal(navController: NavController, auth: FirebaseAuth) {
-    var email by remember { mutableStateOf("") }; var senha by remember { mutableStateOf("") }; var lembrarMe by remember { mutableStateOf(false) }; var senhaVisivel by remember { mutableStateOf(false) }; val context = LocalContext.current
+    var email by remember { mutableStateOf("") }; var senha by remember { mutableStateOf("") }; var lembrarMe by remember { mutableStateOf(false) }; var senhaVisivel by remember { mutableStateOf(false) }; var entrando by remember { mutableStateOf(false) }; val context = LocalContext.current
     Box(modifier = Modifier.fillMaxSize().background(gradientFundoOriginal).statusBarsPadding()) {
         Card(shape = RoundedCornerShape(36.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(10.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(top = 48.dp, bottom = 28.dp).align(Alignment.Center)) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 30.dp)) {
@@ -303,7 +303,7 @@ fun TelaLoginOriginal(navController: NavController, auth: FirebaseAuth) {
                 Spacer(modifier = Modifier.height(30.dp)); Text(text = "Faça seu login", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(22.dp))
                 OutlinedTextField(value = email, onValueChange = { email = it.trim() }, placeholder = { Text("E-mail", color = cinzaTexto, fontSize = 14.sp) }, leadingIcon = { IconeUsuario(cor = azulEscuro, modifier = Modifier.size(20.dp)) }, singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textoDigitado, unfocusedTextColor = textoDigitado, focusedBorderColor = azulEscuro, unfocusedBorderColor = cinzaBorda), modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(14.dp))
-                OutlinedTextField(value = senha, onValueChange = { senha = it.trim() }, placeholder = { Text("Senha", color = cinzaTexto, fontSize = 14.sp) }, leadingIcon = { IconeCadeado(cor = azulEscuro, modifier = Modifier.size(20.dp)) }, trailingIcon = { IconButton(onClick = { senhaVisivel = !senhaVisivel }) { IconeOlho(aberto = senhaVisivel, cor = cinzaTexto, modifier = Modifier.size(22.dp)) } }, visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(), singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textoDigitado, unfocusedTextColor = textoDigitado, focusedBorderColor = azulEscuro, unfocusedBorderColor = cinzaBorda), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = senha, onValueChange = { senha = it }, placeholder = { Text("Senha", color = cinzaTexto, fontSize = 14.sp) }, leadingIcon = { IconeCadeado(cor = azulEscuro, modifier = Modifier.size(20.dp)) }, trailingIcon = { IconButton(onClick = { senhaVisivel = !senhaVisivel }) { IconeOlho(aberto = senhaVisivel, cor = cinzaTexto, modifier = Modifier.size(22.dp)) } }, visualTransformation = if (senhaVisivel) VisualTransformation.None else PasswordVisualTransformation(), singleLine = true, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textoDigitado, unfocusedTextColor = textoDigitado, focusedBorderColor = azulEscuro, unfocusedBorderColor = cinzaBorda), modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { lembrarMe = !lembrarMe }) {
@@ -312,13 +312,41 @@ fun TelaLoginOriginal(navController: NavController, auth: FirebaseAuth) {
                     Text(text = "Esqueci minha senha", color = azulLinhas, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { navController.navigate(Screen.RecuperarSenha.route) })
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable {
-                    if (email.isBlank() || senha.isBlank()) Toast.makeText(context, "Preencha e-mail e senha!", Toast.LENGTH_SHORT).show()
-                    else auth.signInWithEmailAndPassword(email, senha).addOnCompleteListener { task ->
-                        if (task.isSuccessful) { PrefsHelper.setUserId(context, task.result.user?.uid ?: ""); Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show(); navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } }
-                        else Toast.makeText(context, "E-mail ou senha incorretos!", Toast.LENGTH_LONG).show()
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(12.dp)).background(if (entrando) Brush.horizontalGradient(listOf(Color(0xFF6D86A8), Color(0xFF70A58C))) else gradientBotaoOriginal).clickable(enabled = !entrando) {
+                    when {
+                        email.isBlank() || senha.isBlank() -> Toast.makeText(context, "Preencha e-mail e senha!", Toast.LENGTH_SHORT).show()
+                        !android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() -> Toast.makeText(context, "Digite um e-mail válido.", Toast.LENGTH_SHORT).show()
+                        FirebaseApp.getApps(context).isEmpty() -> Toast.makeText(context, "Login não configurado: falta conectar o Firebase ao projeto.", Toast.LENGTH_LONG).show()
+                        else -> {
+                            entrando = true
+                            auth.signInWithEmailAndPassword(email.trim(), senha).addOnCompleteListener { task ->
+                                entrando = false
+                                if (task.isSuccessful) {
+                                    val userId = task.result.user?.uid
+                                    if (userId.isNullOrBlank()) Toast.makeText(context, "Não foi possível confirmar sua conta. Tente novamente.", Toast.LENGTH_LONG).show()
+                                    else { PrefsHelper.setUserId(context, userId); Toast.makeText(context, "Login realizado com sucesso!", Toast.LENGTH_SHORT).show(); navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } }
+                                } else {
+                                    val erro = task.exception?.message.orEmpty().lowercase(Locale.ROOT)
+                                    val mensagemErro = when {
+                                        erro.contains("network") -> "Sem conexão. Verifique a internet e tente novamente."
+                                        erro.contains("user-not-found") || erro.contains("invalid-credential") || erro.contains("wrong-password") -> "E-mail ou senha incorretos."
+                                        erro.contains("too-many-requests") -> "Muitas tentativas. Aguarde um pouco e tente novamente."
+                                        erro.contains("operation-not-allowed") -> "O login por e-mail ainda não está habilitado no Firebase."
+                                        erro.contains("configuration-not-found") || erro.contains("api key") -> "Configuração do Firebase incompleta neste projeto."
+                                        else -> "Não foi possível entrar agora. Confira a conexão e a configuração da conta."
+                                    }
+                                    Toast.makeText(context, mensagemErro, Toast.LENGTH_LONG).show()
+                                }
+                            }.addOnFailureListener {
+                                entrando = false
+                                Toast.makeText(context, "Falha ao conectar ao serviço de login. Tente novamente.", Toast.LENGTH_LONG).show()
+                            }
+                        }
                     }
-                }) { Text("Entrar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+                }) {
+                    if (entrando) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text("Entrando...", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold) }
+                    else Text("Entrar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
                 Spacer(modifier = Modifier.height(22.dp))
                 Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Text("Não tem uma conta? ", color = cinzaTexto, fontSize = 13.sp); Text(text = "Criar conta", color = azulLinhas, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { navController.navigate(Screen.Cadastro.route) })
@@ -1381,11 +1409,24 @@ object OsrmRepository {
                     Surface(color = Color(0xFF6D2636), shape = RoundedCornerShape(8.dp)) { Text("ILUSTRATIVO", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(7.dp, 5.dp)) }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = buscaCidade, onValueChange = { buscaCidade = it }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text("Rua, bairro, cidade, região ou país", fontSize = 11.sp) }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(12.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val criticos = alertasHistorico.count { it.gravidade == "Crítica" }
+                val altos = alertasHistorico.count { it.gravidade == "Alta" }
+                val total = alertasHistorico.size
+                listOf(Triple("TOTAL", total.toString(), Color(0xFF1769AA)), Triple("CRÍTICOS", criticos.toString(), Color(0xFFD92D36)), Triple("ALTOS", altos.toString(), Color(0xFFED8A19))).forEach { item ->
+                    Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(1.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(item.first, fontSize = 9.sp, color = Color(0xFF657789), fontWeight = FontWeight.Bold)
+                            Text(item.second, fontSize = 21.sp, color = item.third, fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(value = buscaCidade, onValueChange = { buscaCidade = it }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text("Buscar cidade ou país", fontSize = 11.sp) }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(12.dp))
                 Spacer(Modifier.width(7.dp)); Button(onClick = { pesquisar() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F)), shape = RoundedCornerShape(12.dp)) { Text("Buscar") }
             }
-            Text(mensagem, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp), color = Color(0xFF4D6475), fontSize = 10.sp)
+            Text(mensagem, modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp), color = Color(0xFF4D6475), fontSize = 10.sp)
             Text("Gravidade", modifier = Modifier.padding(start = 16.dp, top = 6.dp), color = Color(0xFF34495E), fontWeight = FontWeight.Bold, fontSize = 11.sp)
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(opcoesGravidade) { f -> FilterChip(selected = filtroGravidade == f, onClick = { filtroGravidade = f }, label = { Text(f, fontSize = 10.sp) }) } }
             Text("Tipo de ocorrência", modifier = Modifier.padding(start = 16.dp, top = 2.dp), color = Color(0xFF34495E), fontWeight = FontWeight.Bold, fontSize = 11.sp)
