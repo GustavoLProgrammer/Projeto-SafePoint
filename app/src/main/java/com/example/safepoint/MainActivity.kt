@@ -853,6 +853,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         alertasDoLocal.filter { it.gravidade in filtroGravidade && it.tipo in filtroTipo }
     }
     val abrigosVisiveis = remember(mostrarAbrigos, locaisApoioReais) { if (mostrarAbrigos) locaisApoioReais else emptyList() }
+    // Evita reconstruir todos os marcadores em recomposições não relacionadas ao mapa.
+    val assinaturaOverlays = remember { arrayOf("") }
 
     fun carregarLocaisApoio(lat: Double, lng: Double) {
         // Busca locais cadastrados no OpenStreetMap; nunca cria abrigos fictícios.
@@ -1053,7 +1055,11 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 Text(avisoBusca.ifBlank { "${cidadeSelecionada.nome}${if (cidadeSelecionada.uf.isNotBlank() && !cidadeSelecionada.uf.endsWith("-PAIS")) ", ${cidadeSelecionada.uf}" else ""} • ${alertasVisiveis.size} alertas exibidos" }, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
             }
             // Filtros independentes e interativos
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().height(48.dp).background(Color.White),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 item { FilterChip(selected = camadaSat, onClick = {
                     val ativarSatelite = !camadaSat
                     camadaSat = ativarSatelite
@@ -1064,12 +1070,25 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 item { FilterChip(selected = mostrarAbrigos, onClick = { mostrarAbrigos = !mostrarAbrigos; if (locaisApoioReais.isEmpty()) Toast.makeText(context, "Locais de apoio dependem dos dados abertos disponíveis.", Toast.LENGTH_SHORT).show() }, label = { Text("🟢 Locais de apoio", fontSize = 11.sp) }) }
                 items(listOf("Crítica", "Alta", "Média", "Baixa")) { nivel -> FilterChip(selected = nivel in filtroGravidade, onClick = { filtroGravidade = if (nivel in filtroGravidade) filtroGravidade - nivel else filtroGravidade + nivel }, label = { Text(nivel, fontSize = 11.sp) }) }
             }
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().height(42.dp).background(Color.White),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 items(listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Erupção vulcânica")) { tipo -> FilterChip(selected = tipo in filtroTipo, onClick = { filtroTipo = if (tipo in filtroTipo) filtroTipo - tipo else filtroTipo + tipo }, label = { Text(tipo, fontSize = 10.sp) }) }
             }
             Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp)) {
                 AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize()) { view ->
-                    view.overlays.removeAll { it is Marker || it is Polyline }
+                    val novaAssinatura = buildString {
+                        append(alertasVisiveis.joinToString("|") { "${it.id}:${it.lat}:${it.lng}:${it.gravidade}" })
+                        append("#")
+                        append(abrigosVisiveis.joinToString("|") { "${it.id}:${it.lat}:${it.lng}" })
+                        append("#${rotaPontos.size}:${rotaPontos.firstOrNull()?.latitude}:${rotaPontos.firstOrNull()?.longitude}:${rotaPontos.lastOrNull()?.latitude}:${rotaPontos.lastOrNull()?.longitude}")
+                        append("#${gpsAtivo}:${origem.latitude}:${origem.longitude}")
+                    }
+                    if (novaAssinatura != assinaturaOverlays[0]) {
+                        assinaturaOverlays[0] = novaAssinatura
+                        view.overlays.removeAll { it is Marker || it is Polyline }
                     if (rotaPontos.isNotEmpty()) {
                         val linha = Polyline().apply { setPoints(rotaPontos); outlinePaint.color = android.graphics.Color.rgb(65, 160, 255); outlinePaint.strokeWidth = 9f; outlinePaint.strokeCap = Paint.Cap.ROUND; outlinePaint.strokeJoin = Paint.Join.ROUND }
                         view.overlays.add(linha)
@@ -1096,7 +1115,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                         val m = Marker(view).apply { position = origem; title = "Sua posição GPS"; snippet = "Localização fornecida pelo aparelho"; icon = criarPinoSeguranca(context, null, Color(0xFF1976D2), 42); setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM) }
                         view.overlays.add(m)
                     }
-                    view.invalidate()
+                        view.invalidate()
+                    }
                 }
                 Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble + 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Add, "Aumentar zoom", tint = Color(0xFF0B2545)) }
