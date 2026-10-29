@@ -758,7 +758,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var busca by remember { mutableStateOf(SafePointDemoSession.local.nome) }
     var cidadeSelecionada by remember { mutableStateOf(SafePointDemoSession.local) }
     var filtroGravidade by remember { mutableStateOf(setOf("Crítica", "Alta", "Média", "Baixa")) }
-    var filtroTipo by remember { mutableStateOf(setOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone")) }
+    var filtroTipo by remember { mutableStateOf(setOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Erupção vulcânica")) }
     var mostrarAbrigos by remember { mutableStateOf(true) }
     var selecionado by remember { mutableStateOf<AlertaDemo?>(null) }
     var abrigoSelecionado by remember { mutableStateOf<AbrigoDemo?>(null) }
@@ -768,7 +768,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var origem by remember { mutableStateOf(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)) }
     var gpsAtivo by remember { mutableStateOf(false) }
     var avisoBusca by remember { mutableStateOf("") }
-    var alertasDoLocal by remember { mutableStateOf(SafePointDemoData.alertasGlobais) }
+    var alertasDoLocal by remember { mutableStateOf<List<AlertaDemo>>(emptyList()) }
     var locaisApoioReais by remember { mutableStateOf<List<AbrigoDemo>>(emptyList()) }
     var carregandoLocais by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -796,9 +796,67 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     val abrigosVisiveis = remember(mostrarAbrigos, locaisApoioReais) { if (mostrarAbrigos) locaisApoioReais else emptyList() }
 
     fun carregarLocaisApoio(lat: Double, lng: Double) {
-        // Não consulta a rede nem inventa instalações de emergência.
-        locaisApoioReais = emptyList()
-        carregandoLocais = false
+        // Busca locais cadastrados no OpenStreetMap; nunca cria abrigos fictícios.
+        scope.launch {
+            carregandoLocais = true
+            try {
+                locaisApoioReais = OverpassRepository.buscarLocaisDeApoio(lat, lng, 5000)
+                avisoBusca = if (locaisApoioReais.isEmpty()) {
+                    "Nenhum serviço encontrado nos dados abertos nesta área. Isso não confirma que não existam abrigos."
+                } else {
+                    "${locaisApoioReais.size} locais cadastrados encontrados • confirme funcionamento antes de ir"
+                }
+            } catch (_: Exception) {
+                locaisApoioReais = emptyList()
+                avisoBusca = "Não foi possível consultar os locais agora. Verifique a conexão e tente novamente."
+            } finally {
+                carregandoLocais = false
+                mapView.invalidate()
+            }
+        }
+    }
+
+    fun carregarAlertasReais(lat: Double, lng: Double, raioKm: Double = 1000.0, todosGlobais: Boolean = false) {
+        scope.launch {
+            try {
+                val obtidos = mutableListOf<AlertaDemo>()
+                try {
+                    val gdacs = GdacsRepository.buscarDesastres()
+                    gdacs.features.forEach { feature ->
+                        val coords = feature.geometry.coordinates
+                        if (coords.size >= 2) {
+                            val lon = coords[0]; val la = coords[1]
+                            if (la in -90.0..90.0 && lon in -180.0..180.0) {
+                                val props = feature.properties
+                                val tipo = when (props.eventtype.uppercase()) {
+                                    "EQ" -> "Terremoto"; "TC" -> "Ciclone"; "FL" -> "Enchente"
+                                    "VO" -> "Erupção vulcânica"; "DR" -> "Seca"; "WF" -> "Incêndio"
+                                    else -> "Tempestade"
+                                }
+                                val gravidade = when (props.alertlevel.lowercase()) {
+                                    "red" -> "Crítica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Média"
+                                }
+                                val nome = props.name.ifBlank { "Evento ${props.eventid.orEmpty()}" }
+                                obtidos.add(AlertaDemo("gdacs-${props.eventid ?: nome.hashCode()}", nome, tipo, gravidade, la, lon, "Fonte: GDACS • Atualização: ${props.pubDate ?: "não informada"}", props.pubDate ?: ""))
+                            }
+                        }
+                    }
+                } catch (_: Exception) { /* a outra fonte ainda pode responder */ }
+                try {
+                    UsgsRepository.buscarUltimos30Dias().forEach { quake ->
+                        val gravidade = when { quake.magnitude >= 6.5 -> "Crítica"; quake.magnitude >= 5.0 -> "Alta"; quake.magnitude >= 3.5 -> "Média"; else -> "Baixa" }
+                        obtidos.add(AlertaDemo("usgs-${quake.timestamp}-${quake.latitude}-${quake.longitude}", quake.nome, "Terremoto", gravidade, quake.latitude, quake.longitude, "Magnitude ${String.format(Locale.US, "%.1f", quake.magnitude)} • Fonte: USGS", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(quake.timestamp))))
+                    }
+                } catch (_: Exception) { /* não apresentar dados simulados em caso de falha */ }
+                val unicos = obtidos.distinctBy { it.id }
+                alertasDoLocal = if (todosGlobais) unicos else unicos.filter { calcularDistancia(lat, lng, it.lat, it.lng) <= raioKm }
+                avisoBusca = if (alertasDoLocal.isEmpty()) "Nenhum alerta encontrado nas fontes consultadas para esta área. Isso não garante ausência de risco." else "${alertasDoLocal.size} alertas reais carregados • fontes GDACS/USGS quando disponíveis"
+                mapView.invalidate()
+            } catch (_: Exception) {
+                alertasDoLocal = emptyList()
+                avisoBusca = "Não foi possível atualizar os alertas reais. Tente novamente quando a conexão estiver disponível."
+            }
+        }
     }
 
     fun aplicarLocal(local: CidadeDemo, zoom: Double = 13.0) {
@@ -806,7 +864,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         SafePointDemoSession.local = local
         selecionado = null; abrigoSelecionado = null; rotaPontos = emptyList(); rotaInfo = null
         origem = GeoPoint(local.lat, local.lng)
-        alertasDoLocal = SafePointDemoData.alertasParaLocal(local)
+        // Consulta fontes reais; o catálogo de cidades serve apenas para centralizar o mapa.
+        carregarAlertasReais(local.lat, local.lng, todosGlobais = local.nome == "Mundo")
         mapView.controller.animateTo(GeoPoint(local.lat, local.lng))
         mapView.controller.setZoom(zoom)
         mapView.invalidate()
@@ -824,40 +883,71 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             aplicarLocal(local, when { consultaNormalizada in setOf("mundo", "world", "global") -> 2.0; local.nome == "Brasil" -> 4.3; local.uf.endsWith("-PAIS") -> 4.2; else -> 13.0 })
             avisoBusca = "${local.nome}${if (local.uf.isNotBlank() && !local.uf.endsWith("-PAIS")) ", ${local.uf}" else ""} • pesquisa global"
         } else {
-            avisoBusca = "Local não disponível no catálogo offline. Pesquise uma cidade, país ou bairro cadastrado."
-            Toast.makeText(context, avisoBusca, Toast.LENGTH_LONG).show()
+            avisoBusca = "Pesquisando endereço nos dados geográficos abertos…"
+            scope.launch {
+                try {
+                    val resultado = NominatimRepository.buscarPorNome(textoBusca).firstOrNull()
+                    if (resultado != null) {
+                        val lat = resultado.lat.toDoubleOrNull()
+                        val lon = resultado.lon.toDoubleOrNull()
+                        if (lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0) {
+                            val encontrado = CidadeDemo(resultado.display_name.substringBefore(","), "", lat, lon)
+                            aplicarLocal(encontrado, 14.0)
+                            avisoBusca = "Local encontrado nos dados do OpenStreetMap"
+                        } else avisoBusca = "A busca retornou coordenadas inválidas."
+                    } else avisoBusca = "Local não encontrado. Tente incluir cidade e país."
+                } catch (_: Exception) {
+                    avisoBusca = "Busca indisponível no momento. Verifique a conexão e tente novamente."
+                }
+            }
         }
     }
 
     fun calcularRota(destinoLat: Double, destinoLng: Double, nome: String) {
         val inicio = GeoPoint(origem.latitude, origem.longitude)
         val destino = GeoPoint(destinoLat, destinoLng)
-        selecionado = null; abrigoSelecionado = null
-        avisoBusca = "Calculando rota…"
+        selecionado = null
+        abrigoSelecionado = null
+        rotaInfo = null
+        rotaPontos = emptyList()
+        avisoBusca = "Calculando rota real por ruas…"
         scope.launch {
-            val linhaReta = calcularDistancia(inicio.latitude, inicio.longitude, destino.latitude, destino.longitude)
-            val fator = when (modoRota) { ModoRota.CARRO -> 1.28; ModoRota.A_PE -> 1.15; ModoRota.BICICLETA -> 1.20 }
-            val km = linhaReta * fator
-            val velocidade = when (modoRota) { ModoRota.CARRO -> 32.0; ModoRota.A_PE -> 4.5; ModoRota.BICICLETA -> 14.0 }
-            val minutos = (km / velocidade * 60).toInt().coerceAtLeast(1)
-            val duracao = if (minutos < 60) "$minutos min" else "${minutos / 60}h ${minutos % 60}min"
-            val dist = if (km < 1) "${(km * 1000).toInt()} m" else String.format(Locale("pt", "BR"), "%.1f km", km)
-            rotaInfo = RotaInfo(km, minutos, duracao, dist)
-            rotaPontos = (0..12).map { i ->
-                val t = i / 12.0
-                val curva = kotlin.math.sin(t * Math.PI) * 0.012
-                GeoPoint(inicio.latitude + (destino.latitude - inicio.latitude) * t + curva, inicio.longitude + (destino.longitude - inicio.longitude) * t - curva * 0.65)
+            try {
+                val rota = ValhallaRepository.buscarRotaCompleta(
+                    inicio.longitude, inicio.latitude,
+                    destino.longitude, destino.latitude,
+                    modoRota.valhallaCosting
+                )
+                if (rota.pontos.size < 2 || rota.distanciaMetros <= 0.0 || rota.duracaoSeg <= 0.0) {
+                    throw IllegalStateException("O serviço não retornou uma rota utilizável")
+                }
+                rotaPontos = rota.pontos
+                val km = rota.distanciaMetros / 1000.0
+                val minutos = (rota.duracaoSeg / 60.0).toInt().coerceAtLeast(1)
+                val duracao = if (minutos < 60) "$minutos min" else "${minutos / 60}h ${minutos % 60}min"
+                val distancia = if (km < 1.0) "${rota.distanciaMetros.toInt()} m" else String.format(Locale("pt", "BR"), "%.1f km", km)
+                rotaInfo = RotaInfo(km, minutos, duracao, distancia)
+                avisoBusca = "Rota calculada pelo serviço de roteamento • tempo estimado, sujeito a condições locais"
+                mapView.controller.animateTo(GeoPoint(
+                    (rotaPontos.minOf { it.latitude } + rotaPontos.maxOf { it.latitude }) / 2.0,
+                    (rotaPontos.minOf { it.longitude } + rotaPontos.maxOf { it.longitude }) / 2.0
+                ))
+                mapView.controller.setZoom(when { km < 2 -> 15.0; km < 10 -> 13.0; km < 50 -> 10.0; else -> 7.0 })
+                mapView.invalidate()
+            } catch (_: Exception) {
+                avisoBusca = "Não foi possível calcular uma rota real agora. Nenhuma linha aproximada foi desenhada. Tente novamente mais tarde."
+                rotaInfo = null
+                rotaPontos = emptyList()
+                mapView.invalidate()
             }
-            avisoBusca = "Estimativa offline aproximada; não representa navegação por ruas reais."
-            mapView.controller.animateTo(GeoPoint((rotaPontos.minOf { it.latitude } + rotaPontos.maxOf { it.latitude }) / 2.0, (rotaPontos.minOf { it.longitude } + rotaPontos.maxOf { it.longitude }) / 2.0))
-            mapView.controller.setZoom(when { (rotaInfo?.distanciaKm ?: 0.0) < 2 -> 15.0; (rotaInfo?.distanciaKm ?: 0.0) < 10 -> 13.0; (rotaInfo?.distanciaKm ?: 0.0) < 50 -> 10.0; else -> 7.0 })
-            mapView.invalidate()
         }
     }
 
     LaunchedEffect(Unit) {
-        // Localização GPS é opcional; o modo demonstrativo não depende dela.
-        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); carregarLocaisApoio(lat, lng); alertasDoLocal = SafePointDemoData.alertasAoRedor("Sua região", lat, lng) }
+        // Localização GPS é opcional. Busca apenas dados reais quando há coordenadas.
+        if (cidadeSelecionada.nome == "Mundo") carregarAlertasReais(0.0, 0.0, todosGlobais = true)
+        else carregarAlertasReais(cidadeSelecionada.lat, cidadeSelecionada.lng)
+        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) }
     }
     DisposableEffect(temPermissao) {
         if (!temPermissao) return@DisposableEffect onDispose { }
@@ -909,7 +999,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 items(listOf("Crítica", "Alta", "Média", "Baixa")) { nivel -> FilterChip(selected = nivel in filtroGravidade, onClick = { filtroGravidade = if (nivel in filtroGravidade) filtroGravidade - nivel else filtroGravidade + nivel }, label = { Text(nivel, fontSize = 11.sp) }) }
             }
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone")) { tipo -> FilterChip(selected = tipo in filtroTipo, onClick = { filtroTipo = if (tipo in filtroTipo) filtroTipo - tipo else filtroTipo + tipo }, label = { Text(tipo, fontSize = 10.sp) }) }
+                items(listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Erupção vulcânica")) { tipo -> FilterChip(selected = tipo in filtroTipo, onClick = { filtroTipo = if (tipo in filtroTipo) filtroTipo - tipo else filtroTipo + tipo }, label = { Text(tipo, fontSize = 10.sp) }) }
             }
             Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp)) {
                 AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize()) { view ->
@@ -945,7 +1035,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble + 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Add, "Aumentar zoom", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble - 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Remove, "Diminuir zoom", tint = Color(0xFF0B2545)) }
-                    SmallFloatingActionButton(onClick = { if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); alertasDoLocal = SafePointDemoData.alertasAoRedor("Sua região", lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
+                    SmallFloatingActionButton(onClick = { if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.animateTo(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)); mapView.controller.setZoom(if (cidadeSelecionada.nome == "Brasil") 4.3 else 11.0); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.LocationOn, "Centralizar pesquisa", tint = Color(0xFF0B2545)) }
                 }
                 Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text("Base vetorial offline • posições aproximadas", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
@@ -978,7 +1068,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     }
                 }
             }
-            Text("Registros ilustrativos; não confirmam ocorrências em andamento. Pontos de apoio reais exigem dados atualizados.", modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), fontSize = 9.sp, color = Color(0xFF8A3D28), textAlign = TextAlign.Center)
+            Text(if (alertasDoLocal.isEmpty()) "Nenhum alerta encontrado nas fontes consultadas nesta visualização. Isso não garante ausência de risco. Abrigos e serviços dependem dos dados abertos disponíveis." else "Alertas de fontes externas GDACS/USGS quando disponíveis; confira os detalhes e a hora da atualização.", modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), fontSize = 9.sp, color = Color(0xFF8A3D28), textAlign = TextAlign.Center)
         }
     }
 }
