@@ -407,7 +407,7 @@ fun TelaTermosUso(onAceitar: () -> Unit) {
                 Text("1. OBJETIVO E ACEITAÇÃO", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O SafePoint oferece um mapa-múndi vetorial offline, pesquisa em um catálogo de localidades e registros ilustrativos de alertas. Os registros ilustrativos não são um serviço oficial de emergência. Ao criar uma conta e utilizar o aplicativo, você declara ter lido, compreendido e concordado com estes Termos de Uso e Política de Privacidade.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("2. CADASTRO E RESPONSABILIDADE", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Você se compromete a fornecer dados verídicos, completos e atualizados no cadastro (nome, e-mail, telefone, data de nascimento). É responsável por manter a confidencialidade de sua senha e por todas as atividades realizadas em sua conta.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("3. LOCALIZAÇÃO EXATA - CONSENTIMENTO EXPRESSO", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("A localização do aparelho é opcional e só é consultada após a autorização do sistema. Quando você pesquisa endereços, consulta locais de apoio ou solicita rotas, as coordenadas ou termos de pesquisa podem ser enviados aos serviços cartográficos públicos necessários para responder ao pedido. Recursos de conta e perfil podem continuar usando os serviços Firebase descritos nesta política.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
-                Text("4. MAPA E SERVIÇOS CARTOGRÁFICOS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O mapa de ruas utiliza tiles raster do CARTO com dados cartográficos do OpenStreetMap, sem chave de API. A disponibilidade depende da conexão e das políticas/capacidade do provedor; não há garantia de serviço ilimitado. Pesquisas, alertas, locais e rotas podem enviar coordenadas ou consultas aos respectivos serviços públicos. O mapa não é uma transmissão por satélite ao vivo.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
+                Text("4. MAPA E SERVIÇOS CARTOGRÁFICOS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O mapa de ruas utiliza tiles raster do OpenStreetMap, sem chave de API. A disponibilidade depende da conexão e das políticas/capacidade do provedor; não há garantia de serviço ilimitado. Pesquisas, alertas, locais e rotas podem enviar coordenadas ou consultas aos respectivos serviços públicos. O mapa não é uma transmissão por satélite ao vivo.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("5. FIREBASE, ARMAZENAMENTO E SEGURANÇA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Usamos Firebase Authentication para login seguro, Firestore para perfil e histórico, e Firebase Storage para fotos de perfil. As fotos são armazenadas em fotos_perfil/{userId}/profile.jpg com regras que permitem apenas o dono ler/escrever. Caso o bucket não exista ou haja erro 'Object does not exist at location', o app salva apenas dados de texto e informa o usuário.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("6. BOTÃO SOS E EMERGÊNCIA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O botão SOS facilita ligação rápida para 190 (Polícia), 192 (SAMU), 193 (Bombeiros) e compartilhamento de localização via WhatsApp. O SafePoint é ferramenta de apoio e NÃO substitui serviços oficiais de emergência.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("7. HISTÓRICO DE ALERTAS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Os registros apresentados são ilustrativos e não representam ocorrências ativas. O mapa offline não consulta bases atualizadas de hospitais, delegacias ou abrigos. Confirme informações e orientações com as autoridades locais; não use os registros ilustrativos como orientação de segurança.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
@@ -838,9 +838,9 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             // aplicar limites ou ficar indisponível; mantemos a UI e os dados sem inventar tiles.
             setUseDataConnection(true)
             setTileSource(XYTileSource(
-                "CARTO-Voyager",
+                "OpenStreetMap",
                 0, 19, 256, ".png",
-                arrayOf("https://basemaps.cartocdn.com/rastertiles/voyager/")
+                arrayOf("https://tile.openstreetmap.org/")
             ))
             setMultiTouchControls(true)
             isTilesScaledToDpi = true
@@ -1040,7 +1040,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     Spacer(Modifier.width(9.dp))
                     Column(Modifier.weight(1f)) {
                         Text("SafePoint • Mapa", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text(if (camadaSat) "Imagens Esri World Imagery • conexão necessária" else "Mapa de ruas online • dados CARTO / OpenStreetMap", color = Color(0xFFBCE8D7), fontSize = 11.sp)
+                        Text(if (camadaSat) "Imagens Esri World Imagery • conexão necessária" else "Mapa de ruas online • OpenStreetMap", color = Color(0xFFBCE8D7), fontSize = 11.sp)
                     }
                     Surface(color = Color(0xFF176B57), shape = RoundedCornerShape(8.dp)) { Text("FONTES EXTERNAS", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)) }
                 }
@@ -1057,7 +1057,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 item { FilterChip(selected = camadaSat, onClick = {
                     val ativarSatelite = !camadaSat
                     camadaSat = ativarSatelite
-                    mapView.setTileSource(if (ativarSatelite) EsriSatelliteTileSource() else XYTileSource("CARTO-Voyager", 0, 19, 256, ".png", arrayOf("https://basemaps.cartocdn.com/rastertiles/voyager/")))
+                    mapView.setTileSource(if (ativarSatelite) EsriSatelliteTileSource() else XYTileSource("OpenStreetMap", 0, 19, 256, ".png", arrayOf("https://tile.openstreetmap.org/")))
                     mapView.invalidate()
                     Toast.makeText(context, if (ativarSatelite) "Camada de satélite ativada; requer internet" else "Camada de ruas ativada", Toast.LENGTH_SHORT).show()
                 }, label = { Text(if (camadaSat) "🗺️ Ruas" else "🛰️ Satélite", fontSize = 11.sp) }) }
@@ -1104,7 +1104,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     SmallFloatingActionButton(onClick = { if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.animateTo(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)); mapView.controller.setZoom(if (cidadeSelecionada.nome == "Brasil") 4.3 else 11.0); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.LocationOn, "Centralizar pesquisa", tint = Color(0xFF0B2545)) }
                 }
-                Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text(if (camadaSat) "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community" else "© OpenStreetMap contributors • © CARTO", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
+                Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text(if (camadaSat) "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community" else "© OpenStreetMap contributors", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
                 Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), color = Color(0xE60B2545), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFE53935), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Crítica", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFFFF9800), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Alta", color = Color.White, fontSize = 9.sp) }
