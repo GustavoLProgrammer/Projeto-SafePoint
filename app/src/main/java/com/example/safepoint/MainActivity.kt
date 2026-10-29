@@ -86,6 +86,9 @@ import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
+import org.osmdroid.tileprovider.MapTileIndex
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
@@ -404,7 +407,7 @@ fun TelaTermosUso(onAceitar: () -> Unit) {
                 Text("1. OBJETIVO E ACEITAÇÃO", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O SafePoint oferece um mapa-múndi vetorial offline, pesquisa em um catálogo de localidades e registros ilustrativos de alertas. Os registros ilustrativos não são um serviço oficial de emergência. Ao criar uma conta e utilizar o aplicativo, você declara ter lido, compreendido e concordado com estes Termos de Uso e Política de Privacidade.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("2. CADASTRO E RESPONSABILIDADE", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Você se compromete a fornecer dados verídicos, completos e atualizados no cadastro (nome, e-mail, telefone, data de nascimento). É responsável por manter a confidencialidade de sua senha e por todas as atividades realizadas em sua conta.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("3. LOCALIZAÇÃO EXATA - CONSENTIMENTO EXPRESSO", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("A localização do aparelho é opcional e só é consultada após a autorização do sistema. Quando você pesquisa endereços, consulta locais de apoio ou solicita rotas, as coordenadas ou termos de pesquisa podem ser enviados aos serviços cartográficos públicos necessários para responder ao pedido. Recursos de conta e perfil podem continuar usando os serviços Firebase descritos nesta política.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
-                Text("4. MAPA REAL PROFISSIONAL - TECNOLOGIA SEM 403", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O mapa desta versão é um desenho vetorial simplificado gerado localmente no aparelho. Não baixa tiles, não usa chave de mapa nem consulta serviços externos de geocodificação ou rotas. As estradas desenhadas são esquemáticas e não representam a malha viária completa.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
+                Text("4. MAPA E SERVIÇOS CARTOGRÁFICOS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O mapa de ruas utiliza tiles raster do CARTO com dados cartográficos do OpenStreetMap, sem chave de API. A disponibilidade depende da conexão e das políticas/capacidade do provedor; não há garantia de serviço ilimitado. Pesquisas, alertas, locais e rotas podem enviar coordenadas ou consultas aos respectivos serviços públicos. O mapa não é uma transmissão por satélite ao vivo.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("5. FIREBASE, ARMAZENAMENTO E SEGURANÇA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Usamos Firebase Authentication para login seguro, Firestore para perfil e histórico, e Firebase Storage para fotos de perfil. As fotos são armazenadas em fotos_perfil/{userId}/profile.jpg com regras que permitem apenas o dono ler/escrever. Caso o bucket não exista ou haja erro 'Object does not exist at location', o app salva apenas dados de texto e informa o usuário.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("6. BOTÃO SOS E EMERGÊNCIA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O botão SOS facilita ligação rápida para 190 (Polícia), 192 (SAMU), 193 (Bombeiros) e compartilhamento de localização via WhatsApp. O SafePoint é ferramenta de apoio e NÃO substitui serviços oficiais de emergência.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("7. HISTÓRICO DE ALERTAS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Os registros apresentados são ilustrativos e não representam ocorrências ativas. O mapa offline não consulta bases atualizadas de hospitais, delegacias ou abrigos. Confirme informações e orientações com as autoridades locais; não use os registros ilustrativos como orientação de segurança.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
@@ -786,7 +789,21 @@ class OfflineBrasilOverlay(private val cidades: List<CidadeDemo>) : Overlay() {
     }
 }
 
-// Mapa e histórico usam catálogo local e não consultam serviços cartográficos externos.
+/** Camada de imagens World Imagery. A disponibilidade e as condições do provedor podem mudar. */
+class EsriSatelliteTileSource : OnlineTileSourceBase(
+    "Esri World Imagery", 0, 19, 256, ".jpg",
+    arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/")
+) {
+    override fun getTileURLString(pMapTileIndex: Long): String {
+        val z = MapTileIndex.getZoom(pMapTileIndex)
+        val x = MapTileIndex.getX(pMapTileIndex)
+        val y = MapTileIndex.getY(pMapTileIndex)
+        // ArcGIS REST usa a ordem /zoom/row/column e não exige extensão do arquivo.
+        return "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$z/$y/$x"
+    }
+}
+
+// O mapa consulta fontes externas; dados e disponibilidade variam por região.
 @Composable
 fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     val context = LocalContext.current
@@ -795,6 +812,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var filtroGravidade by remember { mutableStateOf(setOf("Crítica", "Alta", "Média", "Baixa")) }
     var filtroTipo by remember { mutableStateOf(setOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Erupção vulcânica")) }
     var mostrarAbrigos by remember { mutableStateOf(true) }
+    var camadaSat by remember { mutableStateOf(false) }
     var selecionado by remember { mutableStateOf<AlertaDemo?>(null) }
     var abrigoSelecionado by remember { mutableStateOf<AbrigoDemo?>(null) }
     var rotaPontos by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
@@ -816,13 +834,19 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     Configuration.getInstance().userAgentValue = "SafePoint/1.3 (Android; ${context.packageName}; https://github.com/GustavoLProgrammer/Projeto-SafePoint)"
     val mapView = remember {
         MapView(context.applicationContext).apply {
-            setUseDataConnection(false)
+            // Mapa de ruas real via tiles raster sem chave de API. O provedor público pode
+            // aplicar limites ou ficar indisponível; mantemos a UI e os dados sem inventar tiles.
+            setUseDataConnection(true)
+            setTileSource(XYTileSource(
+                "CARTO-Voyager",
+                0, 19, 256, ".png",
+                arrayOf("https://basemaps.cartocdn.com/rastertiles/voyager/")
+            ))
             setMultiTouchControls(true)
             isTilesScaledToDpi = true
             setBackgroundColor(android.graphics.Color.rgb(8, 23, 38))
             controller.setZoom(3.0)
             controller.setCenter(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng))
-            overlays.add(OfflineBrasilOverlay(SafePointDemoData.cidades))
         }
     }
     val alertasVisiveis = remember(filtroGravidade, filtroTipo, alertasDoLocal) {
@@ -1016,9 +1040,9 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     Spacer(Modifier.width(9.dp))
                     Column(Modifier.weight(1f)) {
                         Text("SafePoint • Mapa", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text("Mapa-múndi vetorial • funciona sem conexão", color = Color(0xFFBCE8D7), fontSize = 11.sp)
+                        Text(if (camadaSat) "Imagens Esri World Imagery • conexão necessária" else "Mapa de ruas online • dados CARTO / OpenStreetMap", color = Color(0xFFBCE8D7), fontSize = 11.sp)
                     }
-                    Surface(color = Color(0xFF6D2636), shape = RoundedCornerShape(8.dp)) { Text("ILUSTRATIVO", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)) }
+                    Surface(color = Color(0xFF176B57), shape = RoundedCornerShape(8.dp)) { Text("FONTES EXTERNAS", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)) }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1030,7 +1054,14 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             }
             // Filtros independentes e interativos
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                item { FilterChip(selected = mostrarAbrigos, onClick = { mostrarAbrigos = !mostrarAbrigos; if (locaisApoioReais.isEmpty()) Toast.makeText(context, "Locais de apoio verificados exigem uma base atualizada.", Toast.LENGTH_SHORT).show() }, label = { Text("🟢 Locais de apoio", fontSize = 11.sp) }) }
+                item { FilterChip(selected = camadaSat, onClick = {
+                    val ativarSatelite = !camadaSat
+                    camadaSat = ativarSatelite
+                    mapView.setTileSource(if (ativarSatelite) EsriSatelliteTileSource() else XYTileSource("CARTO-Voyager", 0, 19, 256, ".png", arrayOf("https://basemaps.cartocdn.com/rastertiles/voyager/")))
+                    mapView.invalidate()
+                    Toast.makeText(context, if (ativarSatelite) "Camada de satélite ativada; requer internet" else "Camada de ruas ativada", Toast.LENGTH_SHORT).show()
+                }, label = { Text(if (camadaSat) "🗺️ Ruas" else "🛰️ Satélite", fontSize = 11.sp) }) }
+                item { FilterChip(selected = mostrarAbrigos, onClick = { mostrarAbrigos = !mostrarAbrigos; if (locaisApoioReais.isEmpty()) Toast.makeText(context, "Locais de apoio dependem dos dados abertos disponíveis.", Toast.LENGTH_SHORT).show() }, label = { Text("🟢 Locais de apoio", fontSize = 11.sp) }) }
                 items(listOf("Crítica", "Alta", "Média", "Baixa")) { nivel -> FilterChip(selected = nivel in filtroGravidade, onClick = { filtroGravidade = if (nivel in filtroGravidade) filtroGravidade - nivel else filtroGravidade + nivel }, label = { Text(nivel, fontSize = 11.sp) }) }
             }
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1073,7 +1104,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     SmallFloatingActionButton(onClick = { if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.animateTo(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)); mapView.controller.setZoom(if (cidadeSelecionada.nome == "Brasil") 4.3 else 11.0); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.LocationOn, "Centralizar pesquisa", tint = Color(0xFF0B2545)) }
                 }
-                Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text("Base vetorial offline • posições aproximadas", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
+                Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text(if (camadaSat) "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community" else "© OpenStreetMap contributors • © CARTO", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
                 Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), color = Color(0xE60B2545), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFE53935), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Crítica", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFFFF9800), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Alta", color = Color.White, fontSize = 9.sp) }
@@ -1099,7 +1130,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             rotaInfo?.let { info ->
                 Surface(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp), shape = RoundedCornerShape(12.dp), color = Color(0xFFE5F3FF)) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Route, null, tint = Color(0xFF1267A5)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text("Rota • ${modoRota.titulo}", fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("${info.distanciaTexto} • ${info.duracaoTexto}", fontSize = 12.sp, color = Color(0xFF1267A5)); Text("Estimativa em linha aproximada; não usa ruas/trânsito reais.", fontSize = 9.sp, color = Color.Gray) }; IconButton(onClick = { rotaInfo = null; rotaPontos = emptyList(); mapView.invalidate() }) { Icon(Icons.Default.Close, "Fechar rota") }
+                        Icon(Icons.Default.Route, null, tint = Color(0xFF1267A5)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text("Rota • ${modoRota.titulo}", fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("${info.distanciaTexto} • ${info.duracaoTexto}", fontSize = 12.sp, color = Color(0xFF1267A5)); Text("Rota calculada por ruas pelo serviço disponível; tempo estimado, sem garantia de trânsito em tempo real.", fontSize = 9.sp, color = Color.Gray) }; IconButton(onClick = { rotaInfo = null; rotaPontos = emptyList(); mapView.invalidate() }) { Icon(Icons.Default.Close, "Fechar rota") }
                     }
                 }
             }
