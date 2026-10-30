@@ -685,7 +685,7 @@ object SafePointDemoData {
             )
         }
     }
-    fun normalizar(valor: String): String = java.text.Normalizer.normalize(valor.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[,;]+"), " ").replace(Regex("\\s+"), " ").trim()
+    fun normalizar(valor: String): String = valor.lowercase(java.util.Locale.ROOT).trim()
     fun alertasAoRedor(nome: String, lat: Double, lng: Double, quantidade: Int = 2): List<AlertaDemo> {
         val local = CidadeDemo(nome, "", lat, lng)
         return criarDoisAlertas(local, "busca")
@@ -912,7 +912,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                                     "red" -> "Crítica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Média"
                                 }
                                 val nomeTraduzido = traduzirNomeEvento(props.name.ifBlank { "Evento ${props.eventid.orEmpty()}" }, tipo)
-                                val desc = props.description?.replace(Regex("<[^>]*>"), " ")?.replace(Regex("\s+"), " ")?.trim()?.take(400) ?: "Evento $tipo reportado pela GDACS. Nível: $gravidade."
+                                val desc = props.description?.replace(Regex("<[^>]*>"), " ")?.trim()?.take(400) ?: "Evento $tipo GDACS Nivel $gravidade"
                                 obtidos.add(AlertaDemo("gdacs-${props.eventid ?: nomeTraduzido.hashCode()}", nomeTraduzido, tipo, gravidade, la, lon, "$desc • Fonte: GDACS • ${props.pubDate ?: ""}", props.pubDate ?: ""))
                             }
                         }
@@ -1421,7 +1421,7 @@ object OsrmRepository {
                     val nivel = when (f.properties.alertlevel.lowercase(Locale.ROOT)) { "red" -> "Crítica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Moderada" }
                     val tipo = when (f.properties.eventtype.uppercase(Locale.ROOT)) { "FL" -> "Enchente"; "WF" -> "Incêndio florestal"; "TC" -> "Ciclone tropical"; "DR" -> "Seca"; "EQ" -> "Terremoto"; "VO" -> "Erupção vulcânica"; else -> "Evento meteorológico" }
                     val titulo = traduzirNomeEvento(f.properties.name, tipo)
-                    val descFonte = f.properties.description?.replace(Regex("<[^>]*>"), " ")?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+                    val descFonte = f.properties.description?.replace(Regex("<[^>]*>"), " ")?.replace(Regex("\ +"), " ")?.trim().orEmpty()
                     val descricao = descFonte.ifBlank { "$tipo reportado pela GDACS. Nível de alerta: ${nivel.lowercase(Locale("pt", "BR"))}. A fonte não forneceu uma descrição adicional para este evento." }
                     AlertaRota(f.properties.eventid?.takeIf { it.isNotBlank() } ?: "gdacs-$latEvento-$lonEvento-${titulo.hashCode()}", titulo, formatarDataAlerta(f.properties.pubDate), "$tipo • ${String.format(Locale("pt", "BR"), "%.1f km de $localNome", dist)}", nivel, tipo, latEvento, lonEvento, dist, cidade = localNome, descricao = descricao, fonte = "GDACS")
                 }.sortedBy { it.distancia }
@@ -1536,15 +1536,15 @@ object SafePointDemoSession { var local: CidadeDemo = SafePointDemoData.localIni
 fun traduzirNomeEvento(nomeFonte: String, tipoPortuguese: String): String {
     var nome = nomeFonte.trim()
     val substituicoes = listOf(
-        Regex("(?i)^earthquake(?:s)?\\s+in\\s+") to "Terremoto em ",
-        Regex("(?i)^flood(?:ing)?\\s+in\\s+") to "Enchente em ",
-        Regex("(?i)^wildfire(?:s)?\\s+in\\s+") to "Incêndio florestal em ",
-        Regex("(?i)^drought\\s+in\\s+") to "Seca em ",
-        Regex("(?i)^volcanic eruption\\s+in\\s+") to "Erupção vulcânica em ",
-        Regex("(?i)^volcano(?:es)?\\s+in\\s+") to "Vulcão em ",
+        Regex("(?i)^earthquake(?:s)?\ +in\ +") to "Terremoto em ",
+        Regex("(?i)^flood(?:ing)?\ +in\ +") to "Enchente em ",
+        Regex("(?i)^wildfire(?:s)?\ +in\ +") to "Incêndio florestal em ",
+        Regex("(?i)^drought\ +in\ +") to "Seca em ",
+        Regex("(?i)^volcanic eruption\ +in\ +") to "Erupção vulcânica em ",
+        Regex("(?i)^volcano(?:es)?\ +in\ +") to "Vulcão em ",
         Regex("(?i)^tropical cyclone\\s*") to "Ciclone tropical ",
-        Regex("(?i)^tsunami\\s+in\\s+") to "Tsunami em ",
-        Regex("(?i)^severe weather\\s+in\\s+") to "Tempestade severa em "
+        Regex("(?i)^tsunami\ +in\ +") to "Tsunami em ",
+        Regex("(?i)^severe weather\ +in\ +") to "Tempestade severa em "
     )
     for ((regex, substituto) in substituicoes) {
         if (regex.containsMatchIn(nome)) { nome = regex.replaceFirst(nome, substituto); break }
