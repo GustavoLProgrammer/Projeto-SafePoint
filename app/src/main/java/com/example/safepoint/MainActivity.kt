@@ -802,7 +802,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var rotaPontos by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     var rotaInfo by remember { mutableStateOf<RotaInfo?>(null) }
     var modoRota by remember { mutableStateOf(ModoRota.CARRO) }
-    var origem by remember { mutableStateOf<GeoPoint?>(null) }
+    var origem by remember { mutableStateOf(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)) }
     var gpsAtivo by remember { mutableStateOf(false) }
     var avisoBusca by remember { mutableStateOf("") }
     var alertasDoLocal by remember { mutableStateOf<List<AlertaDemo>>(emptyList()) }
@@ -810,7 +810,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var carregandoLocais by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var temPermissao by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) }
-    val /*no launcher*/ = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
         temPermissao = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true || perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true }
         else Toast.makeText(context, "Localização não autorizada. Você ainda pode pesquisar qualquer local no mapa.", Toast.LENGTH_LONG).show()
@@ -955,7 +955,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             avisoBusca = "Ônibus indisponível: ainda não há dados GTFS integrados para esta região. Nenhuma rota será inventada."
             return
         }
-        val inicioVal = origem ?: run { avisoBusca = "Ative GPS ou pesquise um local primeiro para definir origem."; return }; val inicio = GeoPoint(inicioVal.latitude, inicioVal.longitude)
+        val inicio = GeoPoint(origem.latitude, origem.longitude)
         val destino = GeoPoint(destinoLat, destinoLng)
         selecionado = null
         abrigoSelecionado = null
@@ -1073,7 +1073,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     alertasVisiveis.forEach { a ->
                         val marker = Marker(view).apply {
                             position = GeoPoint(a.lat, a.lng); title = "${a.tipo} • ${a.gravidade}"
-                            val distanciaAlerta = origem?.let { calcularDistancia(it.latitude, it.longitude, a.lat, a.lng) } ?: 0.0
+                            val distanciaAlerta = calcularDistancia(origem.latitude, origem.longitude, a.lat, a.lng)
                             snippet = "${a.cidade} — ${a.descricao} • ${formatarDistanciaKm(distanciaAlerta)} de você"
                             icon = criarPinoDesastreNivel(context, when (a.gravidade) { "Crítica" -> "Red"; "Alta" -> "Orange"; "Média" -> "Yellow"; else -> "Green" }, 48)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
@@ -1098,7 +1098,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     SmallFloatingActionButton(onClick = { mapaSatelite = !mapaSatelite }, containerColor = Color.White) { Icon(Icons.Default.Map, if (mapaSatelite) "Mostrar ruas" else "Mostrar satélite", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble + 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Add, "Aumentar zoom", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble - 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Remove, "Diminuir zoom", tint = Color(0xFF0B2545)) }
-                    SmallFloatingActionButton(onClick = { if (!temPermissao) // /*no launcher*/ removido - use temPermissao(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
+                    SmallFloatingActionButton(onClick = { if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.animateTo(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)); mapView.controller.setZoom(if (cidadeSelecionada.nome == "Brasil") 4.3 else 11.0); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.LocationOn, "Centralizar pesquisa", tint = Color(0xFF0B2545)) }
                 }
                 Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text(if (mapaSatelite) "NASA GIBS • imagem com atualização defasada" else "© OpenStreetMap contributors", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
@@ -1116,7 +1116,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(4.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(if (aSel != null) "${aSel.tipo} • ${aSel.cidade}" else abrSel!!.nome, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 14.sp)
-                        Text(if (aSel != null) "${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(origem?.let { calcularDistancia(it.latitude, it.longitude, aSel.lat, aSel.lng) } ?: 0.0)} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
+                        Text(if (aSel != null) "${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(calcularDistancia(origem.latitude, origem.longitude, aSel.lat, aSel.lng))} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 7.dp)) {
                             listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) calcularRota(aSel.lat, aSel.lng, aSel.cidade) else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
                             FilterChip(selected = false, onClick = { avisoBusca = "Ônibus: falta integrar uma base GTFS válida para a área pesquisada." }, label = { Text("Ônibus (indisponível)", fontSize = 10.sp) })
@@ -1355,22 +1355,16 @@ object OsrmRepository {
                 }.sortedBy { it.distancia }
                 alertasHistorico = lista
                 if (lista.isEmpty()) {
-                    // Se não tem nada em 300km, mostra eventos globais recentes para não ficar vazio
                     val global = resposta.features.mapNotNull { f ->
                         val c = f.geometry.coordinates; if (c.size < 2) return@mapNotNull null
-                        val lonEvento = c[0]; val latEvento = c[1]; if (!latEvento.isFinite() || !lonEvento.isFinite()) return@mapNotNull null
+                        val lonE = c[0]; val latE = c[1]; if (!latE.isFinite() || !lonE.isFinite()) return@mapNotNull null
                         val nivel = when (f.properties.alertlevel.lowercase(Locale.ROOT)) { "red" -> "Crítica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Moderada" }
                         val tipo = when (f.properties.eventtype.uppercase(Locale.ROOT)) { "FL" -> "Enchente"; "WF" -> "Incêndio florestal"; "TC" -> "Ciclone tropical"; "DR" -> "Seca"; "EQ" -> "Terremoto"; "VO" -> "Erupção vulcânica"; else -> "Evento meteorológico" }
-                        val dist = calcularDistancia(lat, lon, latEvento, lonEvento)
-                        AlertaRota(f.properties.eventid ?: "gdacs-global-$latEvento-$lonEvento", traduzirNomeEvento(f.properties.name, tipo), formatarDataAlerta(f.properties.pubDate), "$tipo • ${String.format(Locale("pt","BR"), "%.0f km de você", dist)}", nivel, tipo, latEvento, lonEvento, dist, cidade = localNome, descricao = f.properties.description?.replace(Regex("<[^>]*>")," ")?.take(300) ?: "Evento GDACS", fonte = "GDACS")
+                        val dist = calcularDistancia(lat, lon, latE, lonE)
+                        AlertaRota(f.properties.eventid ?: "gdacs-global-$latE-$lonE", traduzirNomeEvento(f.properties.name, tipo), formatarDataAlerta(f.properties.pubDate), "$tipo • ${String.format(Locale("pt","BR"), "%.0f km de você", dist)}", nivel, tipo, latE, lonE, dist, cidade = localNome, descricao = f.properties.description?.replace(Regex("<[^>]*>")," ")?.take(300) ?: "Evento GDACS", fonte = "GDACS")
                     }.sortedBy { it.distancia }.take(20)
-                    if (global.isNotEmpty()) {
-                        alertasHistorico = global
-                        erroFonte = null
-                        ultimaAtualizacao = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt","BR")).format(Date()) + " • mostrando globais (nada em 300km)"
-                    } else {
-                        erroFonte = "A GDACS não retornou eventos agora. Tente buscar outra cidade."
-                    }
+                    if (global.isNotEmpty()) { alertasHistorico = global; erroFonte = null; ultimaAtualizacao = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt","BR")).format(Date()) + " • globais (nada em 300km)" }
+                    else erroFonte = "GDACS sem eventos agora. Tente outra cidade."
                 }
                 ultimaAtualizacao = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(Date())
             } catch (e: Exception) { erroFonte = "Não foi possível consultar a GDACS agora. Verifique sua conexão e tente novamente." }
@@ -1417,7 +1411,7 @@ object OsrmRepository {
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Place, null, tint = Color(0xFF16845F), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text("Área: $localNome", color = Color(0xFF34495E), fontSize = 11.sp, maxLines = 2)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { if (temPermissao) obterLocalizacao(context) { lat, lon -> localNome = "Localização atual"; carregarPorCoordenadas(lat, lon) } else // /*no launcher*/ removido - use temPermissao(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Usar GPS", fontSize = 11.sp) }
+                TextButton(onClick = { if (temPermissao) obterLocalizacao(context) { lat, lon -> localNome = "Localização atual"; carregarPorCoordenadas(lat, lon) } else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Usar GPS", fontSize = 11.sp) }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(Triple("Eventos", alertasHistorico.size, Color(0xFF0B2545)), Triple("Críticos", alertasHistorico.count { it.gravidade == "Crítica" }, Color(0xFFD32F2F)), Triple("Altos", alertasHistorico.count { it.gravidade == "Alta" }, Color(0xFFEF6C00))).forEach { item ->
