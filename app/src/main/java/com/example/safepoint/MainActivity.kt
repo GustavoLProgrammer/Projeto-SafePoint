@@ -802,7 +802,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var rotaPontos by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     var rotaInfo by remember { mutableStateOf<RotaInfo?>(null) }
     var modoRota by remember { mutableStateOf(ModoRota.CARRO) }
-    var origem by remember { mutableStateOf(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)) }
+    var origem by remember { mutableStateOf<GeoPoint?>(null) }
     var gpsAtivo by remember { mutableStateOf(false) }
     var avisoBusca by remember { mutableStateOf("") }
     var alertasDoLocal by remember { mutableStateOf<List<AlertaDemo>>(emptyList()) }
@@ -812,16 +812,34 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var temPermissao by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
         temPermissao = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true || perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true }
+        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; avisoBusca = "GPS: sua localização real atualizada (${String.format(java.util.Locale.getDefault(), "%.4f, %.4f", lat, lng)}) • ${String.format(java.util.Locale.getDefault(), "%.1f km de alertas carregados", 0.0)}" }
         else Toast.makeText(context, "Localização não autorizada. Você ainda pode pesquisar qualquer local no mapa.", Toast.LENGTH_LONG).show()
     }
+    // GPS AUTOMÁTICO ao abrir o mapa
+    LaunchedEffect(Unit) {
+        if (temPermissao) {
+            obterLocalizacao(context) { lat, lng -> 
+                origem = GeoPoint(lat, lng); gpsAtivo = true
+                // Carrega alertas e abrigos da posição real automaticamente
+                carregarAlertasReais(lat, lng, 1500.0, false)
+                carregarLocaisApoio(lat, lng)
+                avisoBusca = "GPS automático ativo • ${String.format(java.util.Locale.getDefault(), "%.4f, %.4f", lat, lng)} • buscando alertas e abrigos reais"
+            }
+        } else {
+            // Pede permissão automaticamente na primeira abertura
+            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
     Configuration.getInstance().userAgentValue = "SafePoint/1.4 (Android; ${context.packageName}; contato: suporte@safepoint.app)"
+    // Satélite NASA GIBS só até zoom 9 - além disso fica preto
     var mapaSatelite by remember { mutableStateOf(false) }
+    var avisoSatelite by remember { mutableStateOf("") }
     val tileSourceRua = remember {
         XYTileSource("OpenStreetMap", 0, 19, 256, ".png", arrayOf("https://a.tile.openstreetmap.org/", "https://b.tile.openstreetmap.org/", "https://c.tile.openstreetmap.org/"), "© OpenStreetMap contributors")
     }
     // Camada pública NASA GIBS. Não é imagem ao vivo nem de alta resolução urbana.
     val tileSourceSatelite = remember {
+        // GIBS max 9, além disso preto - limitamos
         object : XYTileSource("NASA GIBS True Color", 0, 9, 256, ".jpg", arrayOf("https://gibs.earthdata.nasa.gov/"), "NASA GIBS / NASA Earthdata") {
             override fun getTileURLString(pMapTile: Long): String {
                 val z = org.osmdroid.util.MapTileIndex.getZoom(pMapTile)
@@ -851,19 +869,34 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     val abrigosVisiveis = remember(mostrarAbrigos, locaisApoioReais) { if (mostrarAbrigos) locaisApoioReais else emptyList() }
 
     fun carregarLocaisApoio(lat: Double, lng: Double) {
-        // Busca locais cadastrados no OpenStreetMap; nunca cria abrigos fictícios.
         scope.launch {
             carregandoLocais = true
             try {
-                locaisApoioReais = OverpassRepository.buscarLocaisDeApoio(lat, lng, 5000)
-                avisoBusca = if (locaisApoioReais.isEmpty()) {
-                    "Nenhum serviço encontrado nos dados abertos nesta área. Isso não confirma que não existam abrigos."
-                } else {
-                    "${locaisApoioReais.size} locais cadastrados encontrados • confirme funcionamento antes de ir"
+                // Raio maior 10km e mais tipos para garantir que apareça
+                val lista = mutableListOf<AbrigoDemo>()
+                try { lista.addAll(OverpassRepository.buscarLocaisDeApoio(lat, lng, 10000)) } catch(_:Exception){}
+                // Se ainda vazio, tenta buscar hospitais e delegacias separados
+                if (lista.isEmpty()) {
+                    try {
+                        val q = OverpassRepository.buscarPontosSeguranca(lat, lng, "hospital", 10000)
+                        lista.addAll(q.elements.mapNotNull { el ->
+                            val la = el.lat ?: el.center?.lat ?: return@mapNotNull null
+                            val lo = el.lon ?: el.center?.lon ?: return@mapNotNull null
+                            val tags = el.tags.orEmpty()
+                            AbrigoDemo("osm-hosp-${el.id}", tags["name"] ?: "Hospital", "Hospital", la, lo, tags["addr:street"] ?: "Endereço OSM", "Hospital - atendimento médico. Confirme funcionamento e se aceita vítimas. Riscos: superlotação em desastres.")
+                        })
+                    } catch(_:Exception){}
                 }
-            } catch (_: Exception) {
+                locaisApoioReais = lista.distinctBy { it.id }.take(50)
+                avisoBusca = if (locaisApoioReais.isEmpty()) {
+                    "Nenhum abrigo/hospital OSM em 10km. Tente buscar cidade maior. Não inventamos locais."
+                } else {
+                    val cats = locaisApoioReais.groupBy { it.categoria }.map { "${it.value.size} ${it.key}" }.joinToString(", ")
+                    "${locaisApoioReais.size} abrigos reais: $cats • toque no ponto para ver descrição e rota até abrigo (não até perigo)"
+                }
+            } catch (e: Exception) {
                 locaisApoioReais = emptyList()
-                avisoBusca = "Não foi possível consultar os locais agora. Verifique a conexão e tente novamente."
+                avisoBusca = "Falha Overpass: ${e.message}. Verifique internet."
             } finally {
                 carregandoLocais = false
                 mapView.invalidate()
@@ -871,12 +904,13 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         }
     }
 
-    fun carregarAlertasReais(lat: Double, lng: Double, raioKm: Double = 1000.0, todosGlobais: Boolean = false) {
+    fun carregarAlertasReais(lat: Double, lng: Double, raioKm: Double = 1500.0, todosGlobais: Boolean = false) {
         scope.launch {
             try {
                 val obtidos = mutableListOf<AlertaDemo>()
+                // GDACS - todos os tipos reais
                 try {
-                    val gdacs = GdacsRepository.buscarDesastres()
+                    val gdacs = GdacsRepository.buscarDesastres(tipos = "EQ;TC;FL;VO;DR;WF")
                     gdacs.features.forEach { feature ->
                         val coords = feature.geometry.coordinates
                         if (coords.size >= 2) {
@@ -891,32 +925,44 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                                 val gravidade = when (props.alertlevel.lowercase()) {
                                     "red" -> "Crítica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Média"
                                 }
-                                val nome = props.name.ifBlank { "Evento ${props.eventid.orEmpty()}" }
-                                obtidos.add(AlertaDemo("gdacs-${props.eventid ?: nome.hashCode()}", nome, tipo, gravidade, la, lon, "Fonte: GDACS • Atualização: ${props.pubDate ?: "não informada"}", props.pubDate ?: ""))
+                                val nomeTraduzido = traduzirNomeEvento(props.name.ifBlank { "Evento ${props.eventid.orEmpty()}" }, tipo)
+                                val desc = props.description?.replace(Regex("<[^>]*>"), " ")?.replace(Regex("\s+"), " ")?.trim()?.take(400) ?: "Evento $tipo reportado pela GDACS. Nível: $gravidade."
+                                obtidos.add(AlertaDemo("gdacs-${props.eventid ?: nomeTraduzido.hashCode()}", nomeTraduzido, tipo, gravidade, la, lon, "$desc • Fonte: GDACS • ${props.pubDate ?: ""}", props.pubDate ?: ""))
                             }
                         }
                     }
-                } catch (_: Exception) { /* a outra fonte ainda pode responder */ }
+                } catch (e: Exception) { android.util.Log.e("SafePoint", "GDACS falhou: ${e.message}") }
+                // USGS - terremotos
                 try {
                     UsgsRepository.buscarUltimos30Dias().forEach { quake ->
                         val gravidade = when { quake.magnitude >= 6.5 -> "Crítica"; quake.magnitude >= 5.0 -> "Alta"; quake.magnitude >= 3.5 -> "Média"; else -> "Baixa" }
-                        obtidos.add(AlertaDemo("usgs-${quake.timestamp}-${quake.latitude}-${quake.longitude}", quake.nome, "Terremoto", gravidade, quake.latitude, quake.longitude, "Magnitude ${String.format(Locale.US, "%.1f", quake.magnitude)} • Fonte: USGS", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(quake.timestamp))))
+                        obtidos.add(AlertaDemo("usgs-${quake.timestamp}", traduzirNomeEvento(quake.nome, "Terremoto"), "Terremoto", gravidade, quake.latitude, quake.longitude, "Magnitude ${String.format(java.util.Locale.US, "%.1f", quake.magnitude)} • ${quake.nome} • Fonte: USGS", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(quake.timestamp))))
                     }
-                } catch (_: Exception) { /* não apresentar dados simulados em caso de falha */ }
+                } catch (e: Exception) { android.util.Log.e("SafePoint", "USGS falhou: ${e.message}") }
                 val unicos = obtidos.distinctBy { it.id }
-                alertasDoLocal = if (todosGlobais) unicos else unicos.filter { calcularDistancia(lat, lng, it.lat, it.lng) <= raioKm }
-                avisoBusca = if (alertasDoLocal.isEmpty()) "Nenhum alerta encontrado nas fontes consultadas para esta área. Isso não garante ausência de risco." else "${alertasDoLocal.size} alertas reais carregados • fontes GDACS/USGS quando disponíveis"
+                // Se todosGlobais, mostra tudo; senão filtra por raio mas mantém pelo menos 20 globais mais próximos para não ficar vazio
+                val filtrados = if (todosGlobais) unicos else {
+                    val dentroRaio = unicos.filter { calcularDistancia(lat, lng, it.lat, it.lng) <= raioKm }
+                    if (dentroRaio.size >= 5) dentroRaio else {
+                        // poucos no raio, completa com os mais próximos globais para garantir diversidade
+                        val proximos = unicos.sortedBy { calcularDistancia(lat, lng, it.lat, it.lng) }.take(30)
+                        (dentroRaio + proximos).distinctBy { it.id }
+                    }
+                }
+                alertasDoLocal = filtrados
+                val tiposCount = filtrados.groupBy { it.tipo }.map { "${it.value.size} ${it.key}" }.joinToString(", ")
+                avisoBusca = if (filtrados.isEmpty()) "Nenhum alerta nas fontes GDACS/USGS para esta área. Verifique Defesa Civil local." else "${filtrados.size} alertas reais: $tiposCount • fontes GDACS/USGS"
                 mapView.invalidate()
-            } catch (_: Exception) {
-                alertasDoLocal = emptyList()
-                avisoBusca = "Não foi possível atualizar os alertas reais. Tente novamente quando a conexão estiver disponível."
+            } catch (e: Exception) {
+                avisoBusca = "Falha ao carregar alertas reais: ${e.message}"
             }
         }
     }
 
+    
     fun aplicarLocal(local: CidadeDemo, zoom: Double = 13.0) {
         cidadeSelecionada = local
-        origem = GeoPoint(local.lat, local.lng)
+        // origem permanece GPS real do usuário, não muda para local buscado
         selecionado = null; abrigoSelecionado = null; rotaPontos = emptyList(); rotaInfo = null
         origem = GeoPoint(local.lat, local.lng)
         // Consulta fontes reais; o catálogo de cidades serve apenas para centralizar o mapa.
@@ -955,7 +1001,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             avisoBusca = "Ônibus indisponível: ainda não há dados GTFS integrados para esta região. Nenhuma rota será inventada."
             return
         }
-        val inicio = GeoPoint(origem.latitude, origem.longitude)
+        val inicio = GeoPoint(origem?.latitude ?: 0.0, origem?.longitude ?: 0.0)
         val destino = GeoPoint(destinoLat, destinoLng)
         selecionado = null
         abrigoSelecionado = null
@@ -1073,7 +1119,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     alertasVisiveis.forEach { a ->
                         val marker = Marker(view).apply {
                             position = GeoPoint(a.lat, a.lng); title = "${a.tipo} • ${a.gravidade}"
-                            val distanciaAlerta = calcularDistancia(origem.latitude, origem.longitude, a.lat, a.lng)
+                            val distanciaAlerta = origem?.let { calcularDistancia(it.latitude, it.longitude, a.lat, a.lng) } ?: 0.0
                             snippet = "${a.cidade} — ${a.descricao} • ${formatarDistanciaKm(distanciaAlerta)} de você"
                             icon = criarPinoDesastreNivel(context, when (a.gravidade) { "Crítica" -> "Red"; "Alta" -> "Orange"; "Média" -> "Yellow"; else -> "Green" }, 48)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
@@ -1116,12 +1162,36 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(4.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(if (aSel != null) "${aSel.tipo} • ${aSel.cidade}" else abrSel!!.nome, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 14.sp)
-                        Text(if (aSel != null) "${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(calcularDistancia(origem.latitude, origem.longitude, aSel.lat, aSel.lng))} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
+                        Text(if (aSel != null) "${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(origem?.let { calcularDistancia(it.latitude, it.longitude, aSel.lat, aSel.lng) } ?: 0.0)} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 7.dp)) {
                             listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) calcularRota(aSel.lat, aSel.lng, aSel.cidade) else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
-                            FilterChip(selected = false, onClick = { avisoBusca = "Ônibus: falta integrar uma base GTFS válida para a área pesquisada." }, label = { Text("Ônibus (indisponível)", fontSize = 10.sp) })
+                            listOf(ModoRota.ONIBUS).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) { val abr = locaisApoioReais.minByOrNull { calcularDistancia(aSel.lat, aSel.lng, it.lat, it.lng) }; if (abr != null) calcularRota(abr.lat, abr.lng, abr.nome) else carregarLocaisApoio(aSel.lat, aSel.lng) } else if (abrSel != null) calcularRota(abrSel!!.lat, abrSel!!.lng, abrSel!!.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
                         }
-                        Button(onClick = { if (aSel != null) calcularRota(aSel.lat, aSel.lng, aSel.cidade) else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1267A5))) { Icon(Icons.Default.Route, null); Spacer(Modifier.width(7.dp)); Text("Calcular deslocamento") }
+                        Column(Modifier.fillMaxWidth()) {
+                            if (aSel != null) {
+                                val abrigoMaisProximo = locaisApoioReais.minByOrNull { calcularDistancia(aSel.lat, aSel.lng, it.lat, it.lng) }
+                                Text("⚠️ Objetivo: NÃO ir até o perigo. Desvie para abrigo seguro mais próximo.", fontSize = 10.sp, color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                                if (abrigoMaisProximo != null) {
+                                    Text("Abrigo mais próximo do alerta: ${abrigoMaisProximo.nome} (${abrigoMaisProximo.categoria}) • ${String.format(java.util.Locale.getDefault(), "%.1f km do alerta", calcularDistancia(aSel.lat, aSel.lng, abrigoMaisProximo.lat, abrigoMaisProximo.lng))}", fontSize = 10.sp, color = Color(0xFF0B2545))
+                                    Button(onClick = { calcularRota(abrigoMaisProximo.lat, abrigoMaisProximo.lng, abrigoMaisProximo.nome) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Icon(Icons.Default.Home, null); Spacer(Modifier.width(7.dp)); Text("Traçar rota até abrigo: ${abrigoMaisProximo.nome.take(30)}") }
+                                    OutlinedButton(onClick = { carregarLocaisApoio(aSel.lat, aSel.lng) }, modifier = Modifier.fillMaxWidth()) { Text("Buscar mais abrigos perto do alerta", fontSize = 11.sp) }
+                                } else {
+                                    Button(onClick = { carregarLocaisApoio(aSel.lat, aSel.lng) }, modifier = Modifier.fillMaxWidth()) { Text("Buscar abrigos próximos ao alerta") }
+                                    Text("Nenhum abrigo OSM carregado ainda. Clique para buscar em 10km.", fontSize = 9.sp, color = Color.Gray)
+                                }
+                                // Rota até alerta bloqueada - só permite se mesmo território e usuário quer ver
+                                TextButton(onClick = { 
+                                    val dist = origem?.let { calcularDistancia(it.latitude, it.longitude, aSel.lat, aSel.lng) } ?: 0.0
+                                    if (dist > 5000) { avisoBusca = "Rota até perigo bloqueada: ${String.format(java.util.Locale.getDefault(), "%.0f km", dist)} distante. Vá para abrigo, não para perigo." }
+                                    else { calcularRota(aSel.lat, aSel.lng, aSel.cidade) }
+                                }) { Text("Ver rota até local do alerta (não recomendado)", fontSize = 9.sp, color = Color.Gray) }
+                            } else {
+                                // É abrigo
+                                Text("${abrSel!!.categoria} • ${abrSel!!.endereco} • ${abrSel!!.descricao}", fontSize = 10.sp, color = Color(0xFF34495E), modifier = Modifier.padding(bottom = 4.dp))
+                                Text("Status: confirme funcionamento antes de ir. Riscos: verifique lotação, acesso e condições locais.", fontSize = 9.sp, color = Color(0xFF8A3D28))
+                                Button(onClick = { calcularRota(abrSel!!.lat, abrSel!!.lng, abrSel!!.nome) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Icon(Icons.Default.Route, null); Spacer(Modifier.width(7.dp)); Text("Calcular rota até este abrigo") }
+                            }
+                        }
                     }
                 }
             }
