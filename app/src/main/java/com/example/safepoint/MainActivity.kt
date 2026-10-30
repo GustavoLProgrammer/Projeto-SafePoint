@@ -487,7 +487,7 @@ data class DesastreDetalhado(val ocorrencia: Ocorrencia, val alertLevel: String,
 // Dados geográficos locais de cidades brasileiras conhecidas. Alertas e abrigos são simulados.
 data class CidadeDemo(val nome: String, val uf: String, val lat: Double, val lng: Double, val aliases: List<String> = emptyList())
 data class AlertaDemo(val id: String, val cidade: String, val tipo: String, val gravidade: String, val lat: Double, val lng: Double, val descricao: String, val dataHora: String)
-data class AbrigoDemo(val id: String, val cidade: String, val nome: String, val lat: Double, val lng: Double)
+data class AbrigoDemo(val id: String, val cidade: String, val nome: String, val lat: Double, val lng: Double, val categoria: String = cidade, val endereco: String = "", val descricao: String = "Local de apoio OSM - confirme funcionamento")
 object SafePointDemoData {
     val cidades = listOf(
         CidadeDemo("Brasil", "", -14.2350, -51.9253, listOf("brazil", "país", "pais")),
@@ -815,21 +815,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; avisoBusca = "GPS: sua localização real atualizada (${String.format(java.util.Locale.getDefault(), "%.4f, %.4f", lat, lng)}) • ${String.format(java.util.Locale.getDefault(), "%.1f km de alertas carregados", 0.0)}" }
         else Toast.makeText(context, "Localização não autorizada. Você ainda pode pesquisar qualquer local no mapa.", Toast.LENGTH_LONG).show()
     }
-    // GPS AUTOMÁTICO ao abrir o mapa
-    LaunchedEffect(Unit) {
-        if (temPermissao) {
-            obterLocalizacao(context) { lat, lng -> 
-                origem = GeoPoint(lat, lng); gpsAtivo = true
-                // Carrega alertas e abrigos da posição real automaticamente
-                carregarAlertasReais(lat, lng, 1500.0, false)
-                carregarLocaisApoio(lat, lng)
-                avisoBusca = "GPS automático ativo • ${String.format(java.util.Locale.getDefault(), "%.4f, %.4f", lat, lng)} • buscando alertas e abrigos reais"
-            }
-        } else {
-            // Pede permissão automaticamente na primeira abertura
-            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-        }
-    }
+
     Configuration.getInstance().userAgentValue = "SafePoint/1.4 (Android; ${context.packageName}; contato: suporte@safepoint.app)"
     // Satélite NASA GIBS só até zoom 9 - além disso fica preto
     var mapaSatelite by remember { mutableStateOf(false) }
@@ -883,7 +869,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                             val la = el.lat ?: el.center?.lat ?: return@mapNotNull null
                             val lo = el.lon ?: el.center?.lon ?: return@mapNotNull null
                             val tags = el.tags.orEmpty()
-                            AbrigoDemo("osm-hosp-${el.id}", tags["name"] ?: "Hospital", "Hospital", la, lo, tags["addr:street"] ?: "Endereço OSM", "Hospital - atendimento médico. Confirme funcionamento e se aceita vítimas. Riscos: superlotação em desastres.")
+                            AbrigoDemo(id="osm-hosp-${el.id}", cidade="Hospital", nome=tags["name"] ?: "Hospital", lat=la, lng=lo, categoria="Hospital", endereco=tags["addr:street"] ?: "Endereço OSM", descricao="Hospital - atendimento médico. Confirme funcionamento e se aceita vítimas. Riscos: superlotação em desastres.")
                         })
                     } catch(_:Exception){}
                 }
@@ -1040,6 +1026,21 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             }
         }
     }
+
+    // GPS AUTOMÁTICO ao abrir o mapa - agora após definir carregarAlertasReais e carregarLocaisApoio
+    LaunchedEffect(Unit) {
+        if (temPermissao) {
+            obterLocalizacao(context) { lat, lng -> 
+                origem = GeoPoint(lat, lng); gpsAtivo = true
+                carregarAlertasReais(lat, lng, 1500.0, false)
+                carregarLocaisApoio(lat, lng)
+                avisoBusca = "GPS automático ativo • ${String.format(java.util.Locale.getDefault(), "%.4f, %.4f", lat, lng)} • buscando alertas e abrigos reais"
+            }
+        } else {
+            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+
 
     LaunchedEffect(Unit) {
         // Localização GPS é opcional. Busca apenas dados reais quando há coordenadas.
