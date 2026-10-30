@@ -1319,6 +1319,7 @@ object OsrmRepository {
 @Composable fun TelaHistoricoReal(navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     var buscaLocal by remember { mutableStateOf("") }
     var localNome by remember { mutableStateOf("Sua localização") }
     var latitudeBase by remember { mutableStateOf<Double?>(null) }
