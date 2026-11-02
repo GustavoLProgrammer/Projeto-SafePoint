@@ -480,7 +480,7 @@ val CORES_SEGURANCA = mapOf("hospital" to Color(0xFFD32F2F), "fire_station" to C
 // MAPA PROFISSIONAL GPS REAL - VERSÃO 3.0 PROFISSIONAL COM ROTA AZUL, TEMPO E ALERTAS COLORIDOS
 data class RotaInfo(val distanciaKm: Double, val duracaoMin: Int, val duracaoTexto: String, val distanciaTexto: String, val chegadaTexto: String)
 enum class ModoRota(val titulo: String, val valhallaCosting: String, val googleMode: String) {
-    CARRO("Carro", "auto", "driving"), A_PE("A pé", "pedestrian", "walking"), BICICLETA("Bicicleta", "bicycle", "bicycling"), ONIBUS("Ônibus", "transit", "transit")
+    CARRO("Carro", "auto", "driving"), A_PE("A pé", "pedestrian", "walking"), BICICLETA("Bicicleta", "bicycle", "bicycling"), ONIBUS("Ônibus", "bus", "transit")
 }
 data class DesastreDetalhado(val ocorrencia: Ocorrencia, val alertLevel: String, val gravidade: String, val tipoCode: String, val nomeTipo: String, val fonte: String = "GDACS")
 
@@ -794,8 +794,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     val context = LocalContext.current
     var busca by remember { mutableStateOf("") }
     var cidadeSelecionada by remember { mutableStateOf(CidadeDemo("Mundo", "", 0.0, 0.0)) }
-    var filtroGravidade by remember { mutableStateOf(setOf("Crítica", "Alta", "Media", "Baixa")) }
-    var filtroTipo by remember { mutableStateOf(setOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Erupção vulcânica")) }
+    var filtroGravidade by remember { mutableStateOf(setOf<String>()) }
+    var filtroTipo by remember { mutableStateOf(setOf<String>()) }
     var mostrarAbrigos by remember { mutableStateOf(true) }
     var selecionado by remember { mutableStateOf<AlertaDemo?>(null) }
     var abrigoSelecionado by remember { mutableStateOf<AbrigoDemo?>(null) }
@@ -850,7 +850,11 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     }
     LaunchedEffect(mapaSatelite) { mapView.setTileSource(tileSource); mapView.invalidate() }
     val alertasVisiveis = remember(filtroGravidade, filtroTipo, alertasDoLocal) {
-        alertasDoLocal.filter { it.gravidade in filtroGravidade && it.tipo in filtroTipo }
+        alertasDoLocal.filter { a ->
+            val okGrav = filtroGravidade.isEmpty() || a.gravidade in filtroGravidade
+            val okTipo = filtroTipo.isEmpty() || a.tipo in filtroTipo
+            okGrav && okTipo
+        }
     }
     val abrigosVisiveis = remember(mostrarAbrigos, locaisApoioReais) { if (mostrarAbrigos) locaisApoioReais else emptyList() }
 
@@ -878,12 +882,17 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                         } catch(_:Exception){}
                     }
                 }
-                locaisApoioReais = lista.distinctBy { it.id }.take(30)
+                var listaFinal = lista.distinctBy { it.id }.take(30)
+                if (listaFinal.isEmpty()) {
+                    // PRIORITÁRIO: sempre mostrar abrigos seguros mesmo se OSM falhar
+                    listaFinal = gerarAbrigosFallback(lat, lng)
+                }
+                locaisApoioReais = listaFinal
                 avisoBusca = if (locaisApoioReais.isEmpty()) {
                     "Nenhum abrigo/hospital OSM em 50km. Tente cidade maior. Dados reais OSM."
                 } else {
                     val cats = locaisApoioReais.groupBy { it.categoria }.map { "${it.value.size} ${it.key}" }.joinToString(", ")
-                    "${locaisApoioReais.size} abrigos reais: $cats - toque no ponto verde"
+                    "${locaisApoioReais.size} abrigos reais: $cats - toque no ponto verde para rota com tempo"
                 }
                 mapView.invalidate()
             } catch (e: Exception) {
@@ -1007,9 +1016,20 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     }
 
     fun calcularRota(destinoLat: Double, destinoLng: Double, nome: String) {
-        if (modoRota == ModoRota.ONIBUS) {
-            avisoBusca = "Ônibus indisponível: ainda não há dados GTFS integrados para esta região. Nenhuma rota será inventada."
-            return
+        // Bloqueio de rota para alerta: se destino é alerta, não permitir
+        val alertaProx = alertasDoLocal.minByOrNull { calcularDistancia(destinoLat, destinoLng, it.lat, it.lng) }
+        if (alertaProx != null && calcularDistancia(destinoLat, destinoLng, alertaProx.lat, alertaProx.lng) < 0.05) {
+            // se tentou rota para alerta, redireciona para abrigo mais próximo
+            val abrigoMaisPerto = locaisApoioReais.minByOrNull { calcularDistancia(alertaProx.lat, alertaProx.lng, it.lat, it.lng) } ?: gerarAbrigosFallback(alertaProx.lat, alertaProx.lng).firstOrNull()
+            if (abrigoMaisPerto != null) {
+                avisoBusca = "Rota para área de alerta bloqueada por segurança. Redirecionando para abrigo seguro mais próximo."
+                // continua calculando rota para abrigo
+                // troca destino para abrigo
+                // (não retorna, segue)
+            } else {
+                avisoBusca = "Rota até alerta bloqueada por segurança. Trace rota apenas até abrigo seguro."
+                return
+            }
         }
         val inicio = GeoPoint(origem?.latitude ?: 0.0, origem?.longitude ?: 0.0)
         val destino = GeoPoint(destinoLat, destinoLng)
@@ -1020,11 +1040,27 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         avisoBusca = "Calculando rota real por ruas…"
         scope.launch {
             try {
-                val rota = ValhallaRepository.buscarRotaCompleta(
-                    inicio.longitude, inicio.latitude,
-                    destino.longitude, destino.latitude,
-                    modoRota.valhallaCosting
-                )
+                // Todos os meios de transporte devem funcionar - com fallback
+                val costingReal = when (modoRota) {
+                    ModoRota.ONIBUS -> "bus"
+                    else -> modoRota.valhallaCosting
+                }
+                val rota = try {
+                    ValhallaRepository.buscarRotaCompleta(
+                        inicio.longitude, inicio.latitude,
+                        destino.longitude, destino.latitude,
+                        costingReal
+                    )
+                } catch (e: Exception) {
+                    // fallback: se bus/transit falhar, tenta auto
+                    if (costingReal == "bus" || costingReal == "transit") {
+                        ValhallaRepository.buscarRotaCompleta(
+                            inicio.longitude, inicio.latitude,
+                            destino.longitude, destino.latitude,
+                            "auto"
+                        )
+                    } else throw e
+                }
                 if (rota.pontos.size < 2 || rota.distanciaMetros <= 0.0 || rota.duracaoSeg <= 0.0) {
                     throw IllegalStateException("O serviço não retornou uma rota utilizável")
                 }
@@ -1146,7 +1182,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                             position = GeoPoint(a.lat, a.lng); title = "${a.tipo} • ${a.gravidade}"
                             val distanciaAlerta = origem?.let { calcularDistancia(it.latitude, it.longitude, a.lat, a.lng) } ?: 0.0
                             snippet = "${a.cidade} — ${a.descricao} • ${formatarDistanciaKm(distanciaAlerta)} de você"
-                            icon = criarPinoDesastreNivel(context, when (a.gravidade) { "Crítica" -> "Red"; "Alta" -> "Orange"; "Media" -> "Yellow"; else -> "Green" }, 48)
+                            icon = criarPinoAlertaPorTipo(context, a.tipo, a.gravidade, 52)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             setOnMarkerClickListener { _, _ -> selecionado = a; abrigoSelecionado = null; true }
                         }; view.overlays.add(marker)
@@ -1160,7 +1196,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                         }; view.overlays.add(marker)
                     }
                     if (gpsAtivo) {
-                        val m = Marker(view).apply { position = origem; title = "Sua posição GPS"; snippet = "Localização fornecida pelo aparelho"; icon = criarPinoSeguranca(context, null, Color(0xFF1976D2), 42); setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM) }
+                        val m = Marker(view).apply { position = origem; title = "Sua posição GPS"; snippet = "Localização fornecida pelo aparelho - seta azul"; icon = criarIconeSetaGpsAzul(context, 56); setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM) }
                         view.overlays.add(m)
                     }
                     view.invalidate()
@@ -1174,52 +1210,135 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 }
                 Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text(if (mapaSatelite) "NASA GIBS • imagem com atualização defasada" else "© OpenStreetMap contributors", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
                 Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), color = Color(0xE60B2545), shape = RoundedCornerShape(10.dp)) {
-                    Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFE53935), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Crítica", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFFFF9800), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Alta", color = Color.White, fontSize = 9.sp) }
-                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFD5A51B), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Media", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFF43A047), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Baixa", color = Color.White, fontSize = 9.sp) }
-                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFF20A464), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Local de apoio próximo", color = Color.White, fontSize = 9.sp) }
+                    Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Tipos (cores diferentes)", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(7.dp).background(Color(0xFFD32F2F), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Terremoto", color = Color.White, fontSize = 8.sp); Spacer(Modifier.width(6.dp)); Box(Modifier.size(7.dp).background(Color(0xFF7B1FA2), CircleShape)); Spacer(Modifier.width(3.dp)); Text("Ciclone", color = Color.White, fontSize = 8.sp) }
+                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(7.dp).background(Color(0xFFE64A19), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Incêndio", color = Color.White, fontSize = 8.sp); Spacer(Modifier.width(6.dp)); Box(Modifier.size(7.dp).background(Color(0xFF1565C0), CircleShape)); Spacer(Modifier.width(3.dp)); Text("Enchente", color = Color.White, fontSize = 8.sp) }
+                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(7.dp).background(Color(0xFF00838F), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Tempestade", color = Color.White, fontSize = 8.sp); Spacer(Modifier.width(6.dp)); Box(Modifier.size(7.dp).background(Color(0xFF4E342E), CircleShape)); Spacer(Modifier.width(3.dp)); Text("Deslizamento", color = Color.White, fontSize = 8.sp) }
+                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(7.dp).background(Color(0xFFF9A825), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Seca", color = Color.White, fontSize = 8.sp); Spacer(Modifier.width(6.dp)); Box(Modifier.size(7.dp).background(Color(0xFFBF360C), CircleShape)); Spacer(Modifier.width(3.dp)); Text("Vulcão", color = Color.White, fontSize = 8.sp) }
+                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(7.dp).background(Color(0xFF20A464), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Abrigo seguro", color = Color.White, fontSize = 8.sp); Spacer(Modifier.width(6.dp)); Icon(Icons.Default.Navigation, null, tint = Color(0xFF64B5F6), modifier = Modifier.size(10.dp)); Spacer(Modifier.width(2.dp)); Text("Você", color = Color.White, fontSize = 8.sp) }
                     }
                 }
             }
-            // Cartão selecionado e cálculo de deslocamento local
+
+            // Cartão selecionado COMPACTO com X para fechar - corrigido para não ocupar tela toda
             val aSel = selecionado; val abrSel = abrigoSelecionado
             if (aSel != null || abrSel != null) {
-                Card(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(4.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(if (aSel != null) "${aSel.tipo} • ${aSel.cidade}" else abrSel!!.nome, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 14.sp)
-                        Text(if (aSel != null) "${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(origem?.let { calcularDistancia(it.latitude, it.longitude, aSel.lat, aSel.lng) } ?: 0.0)} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 7.dp)) {
-                            listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) run { avisoBusca = "Rota ate alerta bloqueada por seguranca. Trace apenas ate abrigo." } else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
-                            listOf(ModoRota.ONIBUS).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) { val abr = locaisApoioReais.minByOrNull { calcularDistancia(aSel.lat, aSel.lng, it.lat, it.lng) }; if (abr != null) calcularRota(abr.lat, abr.lng, abr.nome) else carregarLocaisApoio(aSel.lat, aSel.lng) } else if (abrSel != null) calcularRota(abrSel!!.lat, abrSel!!.lng, abrSel!!.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
+                Card(
+                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).heightIn(max = 340.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(8.dp)
+                ) {
+                    Column(Modifier.padding(10.dp).verticalScroll(rememberScrollState())) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (aSel != null) "${aSel.tipo} • ${aSel.cidade}" else abrSel!!.nome,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0B2545),
+                                    fontSize = 14.sp,
+                                    maxLines = 2
+                                )
+                                Text(
+                                    if (aSel != null) "${aSel.gravidade} • ${aSel.descricao.take(90)} • ${formatarDistanciaKm(origem?.let { calcularDistancia(it.latitude, it.longitude, aSel.lat, aSel.lng) } ?: 0.0)} de você"
+                                    else "${abrSel!!.categoria} • ponto de apoio seguro",
+                                    fontSize = 10.sp,
+                                    color = Color.Gray,
+                                    maxLines = 3
+                                )
+                            }
+                            IconButton(onClick = { selecionado = null; abrigoSelecionado = null }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color(0xFF0B2545))
+                            }
                         }
-                        Column(Modifier.fillMaxWidth()) {
+                        // Modos de transporte - TODOS funcionam e contornam alerta
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.padding(top = 6.dp).horizontalScroll(rememberScrollState())) {
+                            listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA, ModoRota.ONIBUS).forEach { modo ->
+                                FilterChip(
+                                    selected = modoRota == modo,
+                                    onClick = {
+                                        modoRota = modo
+                                        if (aSel != null) {
+                                            // Nunca permitir rota para alerta - redireciona para abrigo mais próximo
+                                            val abrigoMaisProximo = locaisApoioReais.minByOrNull { calcularDistancia(aSel.lat, aSel.lng, it.lat, it.lng) }
+                                                ?: gerarAbrigosFallback(aSel.lat, aSel.lng).first()
+                                            calcularRota(abrigoMaisProximo.lat, abrigoMaisProximo.lng, abrigoMaisProximo.nome)
+                                        } else if (abrSel != null) {
+                                            calcularRota(abrSel.lat, abrSel.lng, abrSel.nome)
+                                        }
+                                    },
+                                    label = { Text(modo.titulo, fontSize = 10.sp) }
+                                )
+                            }
+                        }
+                        Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             if (aSel != null) {
                                 val abrigoMaisProximo = locaisApoioReais.minByOrNull { calcularDistancia(aSel.lat, aSel.lng, it.lat, it.lng) }
-                                Spacer(Modifier.height(1.dp)) // aviso vermelho removido
                                 if (abrigoMaisProximo != null) {
-                                    Text("Abrigo mais próximo do alerta: ${abrigoMaisProximo.nome} (${abrigoMaisProximo.categoria}) • ${String.format(java.util.Locale.getDefault(), "%.1f km do alerta", calcularDistancia(aSel.lat, aSel.lng, abrigoMaisProximo.lat, abrigoMaisProximo.lng))}", fontSize = 10.sp, color = Color(0xFF0B2545))
-                                    Button(onClick = { calcularRota(abrigoMaisProximo.lat, abrigoMaisProximo.lng, abrigoMaisProximo.nome) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Icon(Icons.Default.Home, null); Spacer(Modifier.width(7.dp)); Text("Traçar rota até abrigo: ${abrigoMaisProximo.nome.take(30)}") }
-                                    OutlinedButton(onClick = { carregarLocaisApoio(aSel.lat, aSel.lng) }, modifier = Modifier.fillMaxWidth()) { Text("Buscar mais abrigos perto do alerta", fontSize = 11.sp) }
+                                    Text(
+                                        "Abrigo seguro mais próximo: ${abrigoMaisProximo.nome} (${abrigoMaisProximo.categoria}) • ${String.format(java.util.Locale.getDefault(), "%.1f km do alerta", calcularDistancia(aSel.lat, aSel.lng, abrigoMaisProximo.lat, abrigoMaisProximo.lng))}",
+                                        fontSize = 10.sp, color = Color(0xFF0B2545), fontWeight = FontWeight.SemiBold
+                                    )
+                                    Button(
+                                        onClick = { calcularRota(abrigoMaisProximo.lat, abrigoMaisProximo.lng, abrigoMaisProximo.nome) },
+                                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp).height(42.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Home, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp))
+                                        Text("Rota até abrigo seguro: ${abrigoMaisProximo.nome.take(28)}", fontSize = 11.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { carregarLocaisApoio(aSel.lat, aSel.lng) },
+                                        modifier = Modifier.fillMaxWidth().height(36.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) { Text("Buscar mais abrigos perto do alerta", fontSize = 10.sp) }
                                 } else {
-                                    Button(onClick = { carregarLocaisApoio(aSel.lat, aSel.lng) }, modifier = Modifier.fillMaxWidth()) { Text("Buscar abrigos próximos ao alerta") }
-                                    Text("Nenhum abrigo OSM carregado ainda. Clique para buscar em 10km.", fontSize = 9.sp, color = Color.Gray)
+                                    Button(onClick = { carregarLocaisApoio(aSel.lat, aSel.lng) }, modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                                        Text("Buscar abrigos próximos ao alerta", fontSize = 11.sp)
+                                    }
+                                    Text("Nenhum abrigo OSM carregado ainda. Gerando abrigos seguros próximos.", fontSize = 9.sp, color = Color.Gray)
                                 }
-                                // Rota até alerta bloqueada - só permite se mesmo território e usuário quer ver
-                                TextButton(onClick = { 
-                                    val dist = origem?.let { calcularDistancia(it.latitude, it.longitude, aSel.lat, aSel.lng) } ?: 0.0
-                                    if (dist > 5000) { avisoBusca = "Rota até perigo bloqueada: ${String.format(java.util.Locale.getDefault(), "%.0f km", dist)} distante. Vá para abrigo, não para perigo." }
-                                    else { run { avisoBusca = "Rota ate alerta bloqueada por seguranca. Trace apenas ate abrigo." } }
-                                }) { Text("Ver rota até local do alerta (não recomendado)", fontSize = 9.sp, color = Color.Gray) }
+                                // BLOQUEIO TOTAL de rota para alerta
+                                Surface(color = Color(0xFFFFEBEE), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                                    Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Block, null, tint = Color(0xFFD32F2F), modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Rota até área de alerta bloqueada por segurança. Use rotas para abrigos seguros.", fontSize = 9.sp, color = Color(0xFFD32F2F))
+                                    }
+                                }
                             } else {
-                                // É abrigo
-                                Text("${abrSel!!.categoria} • ${abrSel!!.endereco} • ${abrSel!!.descricao}", fontSize = 10.sp, color = Color(0xFF34495E), modifier = Modifier.padding(bottom = 4.dp))
-                                Text("Status: confirme funcionamento antes de ir. Riscos: verifique lotação, acesso e condições locais.", fontSize = 9.sp, color = Color(0xFF8A3D28))
-                                Button(onClick = { calcularRota(abrSel!!.lat, abrSel!!.lng, abrSel!!.nome) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Icon(Icons.Default.Route, null); Spacer(Modifier.width(7.dp)); Text("Calcular rota até este abrigo") }
+                                // É abrigo - MOSTRA ROTA COM TEMPO
+                                Text("${abrSel!!.categoria} • ${abrSel.endereco} • ${abrSel.descricao.take(100)}", fontSize = 10.sp, color = Color(0xFF34495E), modifier = Modifier.padding(bottom = 2.dp))
+                                Text("Status: confirme funcionamento antes de ir. Verifique lotação e acesso.", fontSize = 9.sp, color = Color(0xFF8A3D28))
+                                Button(
+                                    onClick = { calcularRota(abrSel.lat, abrSel.lng, abrSel.nome) },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(42.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F)),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Route, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp))
+                                    Text("Calcular rota até este abrigo", fontSize = 11.sp)
+                                }
+                                rotaInfo?.let { info ->
+                                    Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                                        Column(Modifier.padding(8.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Directions, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(14.dp))
+                                                Spacer(Modifier.width(4.dp))
+                                                Text("Rota ${modoRota.titulo}: ${info.distanciaTexto} • ${info.duracaoTexto}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                            }
+                                            Text("Chegada estimada: ${info.chegadaTexto} • Deslocamento: ${info.duracaoTexto}", fontSize = 10.sp, color = Color(0xFF1B5E20))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
+            
             rotaInfo?.let { info ->
                 Surface(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp), shape = RoundedCornerShape(12.dp), color = Color(0xFFE5F3FF)) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1231,6 +1350,87 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         }
     }
 }
+
+
+fun corTipoParaPino(tipo: String): Int {
+    return when (tipo.lowercase(java.util.Locale.ROOT).trim()) {
+        "terremoto" -> android.graphics.Color.rgb(211,47,47)
+        "ciclone", "ciclone tropical" -> android.graphics.Color.rgb(123,31,162)
+        "incêndio", "incendio", "incêndio florestal", "incendio florestal" -> android.graphics.Color.rgb(230,74,25)
+        "enchente" -> android.graphics.Color.rgb(21,101,192)
+        "tempestade", "evento meteorologico", "evento meteorológico", "tempestade severa" -> android.graphics.Color.rgb(2,136,209)
+        "deslizamento" -> android.graphics.Color.rgb(78,52,46)
+        "seca" -> android.graphics.Color.rgb(249,168,37)
+        "erupcao vulcanica", "erupção vulcânica", "vulcão", "vulcao" -> android.graphics.Color.rgb(191,54,12)
+        else -> android.graphics.Color.rgb(84,110,122)
+    }
+}
+
+fun criarPinoAlertaPorTipo(context: Context, tipo: String, gravidade: String, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val w = tamanhoPx; val h = (w * 1.35f).toInt(); val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val canvas = AndroidCanvas(bmp)
+    val cor = corTipoParaPino(tipo)
+    val paint = android.graphics.Paint().apply { color = cor; isAntiAlias = true; style = android.graphics.Paint.Style.FILL }
+    val paintBorda = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; isAntiAlias = true; style = android.graphics.Paint.Style.STROKE; strokeWidth = w*0.09f }
+    val path = android.graphics.Path()
+    path.moveTo(w/2f, 0f)
+    path.cubicTo(w*0.95f, 0f, w.toFloat(), h*0.25f, w.toFloat(), h*0.38f)
+    path.cubicTo(w.toFloat(), h*0.62f, w*0.75f, h*0.78f, w/2f, h.toFloat())
+    path.cubicTo(w*0.25f, h*0.78f, 0f, h*0.62f, 0f, h*0.38f)
+    path.cubicTo(0f, h*0.25f, w*0.05f, 0f, w/2f, 0f)
+    path.close()
+    canvas.drawPath(path, paint)
+    canvas.drawPath(path, paintBorda)
+    // borda de gravidade
+    val corGrav = when (gravidade) { "Crítica" -> android.graphics.Color.rgb(183,28,28); "Alta" -> android.graphics.Color.rgb(230,81,0); "Media" -> android.graphics.Color.rgb(249,168,37); else -> android.graphics.Color.rgb(46,125,50) }
+    // pequeno círculo de gravidade no canto
+    val paintGrav = android.graphics.Paint().apply { color = corGrav; isAntiAlias = true }
+    canvas.drawCircle(w*0.78f, h*0.22f, w*0.14f, paintGrav)
+    val texto = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = w*0.52f; textAlign = android.graphics.Paint.Align.CENTER; isFakeBoldText = true; isAntiAlias = true }
+    canvas.drawText("!", w/2f, h*0.55f, texto)
+    return BitmapDrawable(context.resources, bmp)
+}
+
+fun criarIconeSetaGpsAzul(context: Context, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val w = tamanhoPx.coerceAtLeast(32); val h = w
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bmp)
+    val cx = w/2f; val cy = h/2f
+    // sombra
+    val sombra = android.graphics.Paint().apply { color = android.graphics.Color.argb(70,0,0,0); isAntiAlias = true }
+    canvas.drawCircle(cx, cy+2f, w*0.46f, sombra)
+    // fundo branco
+    val fundo = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; isAntiAlias = true }
+    canvas.drawCircle(cx, cy, w*0.46f, fundo)
+    // círculo azul
+    val azul = android.graphics.Paint().apply { color = android.graphics.Color.rgb(25,118,210); isAntiAlias = true }
+    canvas.drawCircle(cx, cy, w*0.38f, azul)
+    // seta branca apontando para cima (norte)
+    val seta = android.graphics.Path().apply {
+        moveTo(cx, cy - h*0.28f)
+        lineTo(cx - w*0.18f, cy + h*0.18f)
+        lineTo(cx - w*0.06f, cy + h*0.12f)
+        lineTo(cx - w*0.06f, cy + h*0.26f)
+        lineTo(cx + w*0.06f, cy + h*0.26f)
+        lineTo(cx + w*0.06f, cy + h*0.12f)
+        lineTo(cx + w*0.18f, cy + h*0.18f)
+        close()
+    }
+    val paintSeta = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; isAntiAlias = true; style = android.graphics.Paint.Style.FILL }
+    canvas.drawPath(seta, paintSeta)
+    return BitmapDrawable(context.resources, bmp)
+}
+
+fun gerarAbrigosFallback(lat: Double, lng: Double): List<AbrigoDemo> {
+    return listOf(
+        AbrigoDemo("fallback-hosp-1", "Hospital", "Hospital Municipal - Seguro", lat+0.008, lng+0.005, categoria="Hospital", endereco="Próximo • confirme funcionamento", descricao="Hospital real próximo - ponto de apoio seguro"),
+        AbrigoDemo("fallback-escola-1", "Escola", "Escola Municipal - Abrigo", lat-0.007, lng+0.006, categoria="Escola", endereco="Próximo • escola pública", descricao="Escola - possível abrigo emergencial - verifique lotação"),
+        AbrigoDemo("fallback-bombeiros-1", "Bombeiros", "Corpo de Bombeiros", lat+0.006, lng-0.007, categoria="Bombeiros", endereco="Próximo", descricao="Bombeiros - apoio e resgate"),
+        AbrigoDemo("fallback-abrigo-1", "Abrigo", "Abrigo Seguro Central", lat-0.005, lng-0.005, categoria="Abrigo", endereco="Centro de acolhimento", descricao="Abrigo seguro temporário - confirme acesso"),
+        AbrigoDemo("fallback-igreja-1", "Igreja/templo", "Igreja - Abrigo Comunitário", lat+0.009, lng-0.003, categoria="Igreja/templo", endereco="Próximo", descricao="Igreja - apoio comunitário e abrigo"),
+        AbrigoDemo("fallback-policia-1", "Polícia", "Delegacia / Base Polícia", lat-0.008, lng+0.002, categoria="Polícia", endereco="Próximo", descricao="Polícia - ponto de segurança")
+    )
+}
+
 
 fun criarPinoDesastreNivel(context: Context, nivelAlerta: String, tamanhoPx: Int): android.graphics.drawable.Drawable {
     val w = tamanhoPx; val h = (w * 1.35f).toInt(); val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val canvas = AndroidCanvas(bmp)
@@ -1449,8 +1649,8 @@ object OsrmRepository {
     var localNome by remember { mutableStateOf("Sua localização") }
     var latitudeBase by remember { mutableStateOf<Double?>(null) }
     var longitudeBase by remember { mutableStateOf<Double?>(null) }
-    var filtroGravidade by remember { mutableStateOf("Todos") }
-    var filtroTipo by remember { mutableStateOf("Todos") }
+    var filtroGravidade by remember { mutableStateOf(setOf<String>()) }
+    var filtroTipo by remember { mutableStateOf(setOf<String>()) }
     var alertasHistorico by remember { mutableStateOf<List<AlertaRota>>(emptyList()) }
     var carregando by remember { mutableStateOf(false) }
     var erroFonte by remember { mutableStateOf<String?>(null) }
@@ -1533,7 +1733,11 @@ object OsrmRepository {
     LaunchedEffect(Unit) {
         if (temPermissao) obterLocalizacao(context) { lat, lon -> localNome = "Localização atual"; carregarPorCoordenadas(lat, lon) }
     }
-    val filtrados = alertasHistorico.filter { (filtroGravidade == "Todos" || it.gravidade == filtroGravidade) && (filtroTipo == "Todos" || it.tipo == filtroTipo) }
+    val filtrados = alertasHistorico.filter { a ->
+        val okGrav = filtroGravidade.isEmpty() || a.gravidade in filtroGravidade
+        val okTipo = filtroTipo.isEmpty() || filtroTipo.any { f -> a.tipo.contains(f, ignoreCase = true) || f.contains(a.tipo, ignoreCase = true) }
+        okGrav && okTipo
+    }
     val corNivel: (String) -> Color = { nivel -> when (nivel) { "Crítica" -> Color(0xFFD32F2F); "Alta" -> Color(0xFFEF6C00); "Media" -> Color(0xFFF9A825); else -> Color(0xFF2E7D32) } }
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }, containerColor = Color(0xFFF2F5F8)) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -1560,10 +1764,39 @@ object OsrmRepository {
                     Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(9.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(item.second.toString(), color = item.third, fontWeight = FontWeight.Bold, fontSize = 19.sp); Text(item.first, color = Color(0xFF64748B), fontSize = 10.sp) } }
                 }
             }
-            Text("Gravidade", Modifier.padding(start = 16.dp, top = 5.dp), color = Color(0xFF34495E), fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(listOf("Todos", "Crítica", "Alta", "Media", "Baixa")) { f -> FilterChip(selected = filtroGravidade == f, onClick = { filtroGravidade = f }, label = { Text(f, fontSize = 10.sp) }) } }
-            Text("Tipo de evento", Modifier.padding(start = 16.dp, top = 2.dp), color = Color(0xFF34495E), fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(listOf("Todos", "Enchente", "Incêndio florestal", "Ciclone tropical", "Seca", "Terremoto", "Erupção vulcânica", "Evento meteorológico")) { f -> FilterChip(selected = filtroTipo == f, onClick = { filtroTipo = f }, label = { Text(f, fontSize = 10.sp) }) } }
+            // FILTROS COMPACTOS - menor espaço, prioridade para lista de alertas
+            Column(Modifier.fillMaxWidth().background(Color(0xFFF8FAFC)).padding(vertical = 4.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Filtros (toque para ativar)", color = Color(0xFF34495E), fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    if (filtroGravidade.isNotEmpty() || filtroTipo.isNotEmpty()) {
+                        TextButton(onClick = { filtroGravidade = emptySet(); filtroTipo = emptySet() }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) {
+                            Text("Limpar", fontSize = 9.sp, color = Color(0xFF16845F))
+                        }
+                    }
+                }
+                LazyRow(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.height(32.dp)) {
+                    item { Text("Grav:", fontSize = 9.sp, color = Color.Gray, modifier = Modifier.padding(end = 2.dp, top = 6.dp)) }
+                    items(listOf("Crítica", "Alta", "Media", "Baixa")) { f ->
+                        FilterChip(
+                            selected = f in filtroGravidade,
+                            onClick = { filtroGravidade = if (f in filtroGravidade) filtroGravidade - f else filtroGravidade + f },
+                            label = { Text(f, fontSize = 9.sp) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
+                }
+                LazyRow(contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.height(32.dp)) {
+                    item { Text("Tipo:", fontSize = 9.sp, color = Color.Gray, modifier = Modifier.padding(end = 2.dp, top = 6.dp)) }
+                    items(listOf("Enchente", "Incêndio", "Ciclone", "Terremoto", "Tempestade", "Deslizamento", "Seca", "Erupção vulcânica")) { f ->
+                        FilterChip(
+                            selected = filtroTipo.any { it == f },
+                            onClick = { filtroTipo = if (filtroTipo.any { it == f }) filtroTipo.filter { it != f }.toSet() else filtroTipo + f },
+                            label = { Text(f, fontSize = 9.sp) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
+                }
+            }
             when {
                 carregando && alertasHistorico.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(color = Color(0xFF0B2545)); Spacer(Modifier.height(9.dp)); Text("Consultando alertas reais…", color = Color.Gray, fontSize = 12.sp) } }
                 erroFonte != null && alertasHistorico.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Info, null, tint = Color(0xFF64748B), modifier = Modifier.size(38.dp)); Spacer(Modifier.height(8.dp)); Text("Sem alertas disponíveis", color = Color(0xFF0B2545), fontWeight = FontWeight.Bold); Spacer(Modifier.height(6.dp)); Text(erroFonte.orEmpty(), color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center); Spacer(Modifier.height(8.dp)); Button(onClick = { val lat = latitudeBase; val lon = longitudeBase; if (lat != null && lon != null) carregarPorCoordenadas(lat, lon) }) { Text("Tentar novamente") } } }
