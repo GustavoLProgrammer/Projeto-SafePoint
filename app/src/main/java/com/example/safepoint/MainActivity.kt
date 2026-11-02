@@ -816,11 +816,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         else Toast.makeText(context, "Localização não autorizada. Você ainda pode pesquisar qualquer local no mapa.", Toast.LENGTH_LONG).show()
     }
 
-    fun criarIconeSetaAzul(context: android.content.Context): android.graphics.drawable.Drawable {
-        val d = androidx.core.content.ContextCompat.getDrawable(context, android.R.drawable.arrow_up_float) ?: androidx.core.content.ContextCompat.getDrawable(context, android.R.drawable.ic_menu_mylocation)!!
-        d.setTint(android.graphics.Color.parseColor("#2196F3"))
-        return d
-    }
     Configuration.getInstance().userAgentValue = "SafePoint/1.4 (Android; ${context.packageName}; contato: suporte@safepoint.app)"
     // Satélite NASA GIBS só até zoom 9 - além disso fica preto
     var mapaSatelite by remember { mutableStateOf(false) }
@@ -859,8 +854,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     }
     val abrigosVisiveis = remember(mostrarAbrigos, locaisApoioReais) { if (mostrarAbrigos) locaisApoioReais else emptyList() }
 
-    
-    fun carregarLocaisApoio(lat: Double, lng: Double) {
+        fun carregarLocaisApoio(lat: Double, lng: Double) {
         scope.launch {
             carregandoLocais = true
             try {
@@ -879,16 +873,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                                 val la = el.lat ?: el.center?.lat ?: return@mapNotNull null
                                 val lo = el.lon ?: el.center?.lon ?: return@mapNotNull null
                                 val tags = el.tags.orEmpty()
-                                AbrigoDemo(id="osm-hosp-${el.id}", cidade="Hospital", nome=tags["name"] ?: "Hospital", lat=la, lng=lo, categoria="Hospital", endereco="", descricao="Hospital real OSM")
-                            })
-                        } catch(_:Exception){}
-                        try {
-                            val school = OverpassRepository.buscarPontosSeguranca(lat, lng, "school", raio)
-                            lista.addAll(school.elements.mapNotNull { el ->
-                                val la = el.lat ?: el.center?.lat ?: return@mapNotNull null
-                                val lo = el.lon ?: el.center?.lon ?: return@mapNotNull null
-                                val tags = el.tags.orEmpty()
-                                AbrigoDemo(id="osm-school-${el.id}", cidade="Escola", nome=tags["name"] ?: "Escola", lat=la, lng=lo, categoria="Escola", endereco="", descricao="Escola - possivel abrigo")
+                                AbrigoDemo(id="osm-hosp-${el.id}", cidade="Hospital", nome=tags["name"] ?: "Hospital OSM", lat=la, lng=lo, categoria="Hospital", endereco="", descricao="Hospital real OSM - confirme funcionamento")
                             })
                         } catch(_:Exception){}
                     }
@@ -911,9 +896,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         }
     }
 
-
-    
-    fun carregarAlertasReais(lat: Double, lng: Double, raioKm: Double = 1500.0, todosGlobais: Boolean = false) {
+        fun carregarAlertasReais(lat: Double, lng: Double, raioKm: Double = 1500.0, todosGlobais: Boolean = false) {
         scope.launch {
             try {
                 val obtidos = mutableListOf<AlertaDemo>()
@@ -934,7 +917,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                                     "red" -> "Critica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Media"
                                 }
                                 val nomeTraduzido = traduzirNomeEvento(props.name.ifBlank { "Evento ${props.eventid.orEmpty()}" }, tipo)
-                                val desc = props.description?.replace(Regex("<[^>]*>"), " ")?.trim()?.take(300) ?: "Evento $tipo GDACS"
+                                val desc = props.description?.replace(Regex("""<[^>]*>"""), " ")?.trim()?.take(300) ?: "Evento $tipo GDACS"
                                 obtidos.add(AlertaDemo("gdacs-${props.eventid ?: nomeTraduzido.hashCode()}", nomeTraduzido, tipo, gravidade, la, lon, "$desc - Fonte: GDACS", props.pubDate ?: ""))
                             }
                         }
@@ -968,7 +951,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                         }
                     }
                 } catch (e: Exception) { android.util.Log.e("SafePoint", "EONET falhou: ${e.message}") }
-
                 val unicos = obtidos.distinctBy { it.id }
                 val filtrados = if (todosGlobais) unicos else {
                     val dentroRaio = unicos.filter { calcularDistancia(lat, lng, it.lat, it.lng) <= raioKm }
@@ -986,7 +968,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             }
         }
     }
-
 
     
     fun aplicarLocal(local: CidadeDemo, zoom: Double = 13.0) {
@@ -1208,13 +1189,13 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                         Text(if (aSel != null) "${aSel.tipo} • ${aSel.cidade}" else abrSel!!.nome, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 14.sp)
                         Text(if (aSel != null) "${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(origem?.let { calcularDistancia(it.latitude, it.longitude, aSel.lat, aSel.lng) } ?: 0.0)} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 7.dp)) {
-                            listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) run { avisoBusca = "Por seguranca, rota apenas ate abrigo." } else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
+                            listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) run { avisoBusca = "Rota ate alerta bloqueada por seguranca. Trace apenas ate abrigo." } else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
                             listOf(ModoRota.ONIBUS).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) { val abr = locaisApoioReais.minByOrNull { calcularDistancia(aSel.lat, aSel.lng, it.lat, it.lng) }; if (abr != null) calcularRota(abr.lat, abr.lng, abr.nome) else carregarLocaisApoio(aSel.lat, aSel.lng) } else if (abrSel != null) calcularRota(abrSel!!.lat, abrSel!!.lng, abrSel!!.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
                         }
                         Column(Modifier.fillMaxWidth()) {
                             if (aSel != null) {
                                 val abrigoMaisProximo = locaisApoioReais.minByOrNull { calcularDistancia(aSel.lat, aSel.lng, it.lat, it.lng) }
-                                Spacer(Modifier.height(1.dp))
+                                Spacer(Modifier.height(1.dp)) // aviso vermelho removido
                                 if (abrigoMaisProximo != null) {
                                     Text("Abrigo mais próximo do alerta: ${abrigoMaisProximo.nome} (${abrigoMaisProximo.categoria}) • ${String.format(java.util.Locale.getDefault(), "%.1f km do alerta", calcularDistancia(aSel.lat, aSel.lng, abrigoMaisProximo.lat, abrigoMaisProximo.lng))}", fontSize = 10.sp, color = Color(0xFF0B2545))
                                     Button(onClick = { calcularRota(abrigoMaisProximo.lat, abrigoMaisProximo.lng, abrigoMaisProximo.nome) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Icon(Icons.Default.Home, null); Spacer(Modifier.width(7.dp)); Text("Traçar rota até abrigo: ${abrigoMaisProximo.nome.take(30)}") }
@@ -1227,7 +1208,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                                 TextButton(onClick = { 
                                     val dist = origem?.let { calcularDistancia(it.latitude, it.longitude, aSel.lat, aSel.lng) } ?: 0.0
                                     if (dist > 5000) { avisoBusca = "Rota até perigo bloqueada: ${String.format(java.util.Locale.getDefault(), "%.0f km", dist)} distante. Vá para abrigo, não para perigo." }
-                                    else { run { avisoBusca = "Por seguranca, rota apenas ate abrigo." } }
+                                    else { run { avisoBusca = "Rota ate alerta bloqueada por seguranca. Trace apenas ate abrigo." } }
                                 }) { Text("Ver rota até local do alerta (não recomendado)", fontSize = 9.sp, color = Color.Gray) }
                             } else {
                                 // É abrigo
@@ -1289,7 +1270,7 @@ object EonetRepository {
     private val client = okhttp3.OkHttpClient.Builder().build()
     private val retrofit = retrofit2.Retrofit.Builder().baseUrl("https://eonet.gsfc.nasa.gov/").client(client).addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create()).build()
     private val api = retrofit.create(EonetApi::class.java)
-    suspend fun buscarEventos(): EonetResponse = api.getEventos()
+    suspend fun buscarEventos(): EonetResponse = try { api.getEventos() } catch(e: Exception) { EonetResponse(emptyList()) }
 }
 interface EonetApi {
     @retrofit2.http.GET("api/v3/events")
@@ -1464,14 +1445,12 @@ object OsrmRepository {
     var locaisEncontrados by remember { mutableStateOf<List<NominatimSearchResult>>(emptyList()) }
     var mostrarSugestoes by remember { mutableStateOf(false) }
     val temPermissao = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    
-    fun carregarPorCoordenadas(lat: Double, lon: Double) {
+        fun carregarPorCoordenadas(lat: Double, lon: Double) {
         if (carregando) return
         latitudeBase = lat; longitudeBase = lon; carregando = true; erroFonte = null; alertasHistorico = emptyList()
         scope.launch {
             try {
                 val lista = mutableListOf<AlertaRota>()
-                // GDACS
                 try {
                     val resposta = GdacsRepository.buscarDesastres()
                     resposta.features.forEach { f ->
@@ -1482,11 +1461,10 @@ object OsrmRepository {
                         val nivel = when (f.properties.alertlevel.lowercase(java.util.Locale.ROOT)) { "red" -> "Critica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Moderada" }
                         val tipo = when (f.properties.eventtype.uppercase(java.util.Locale.ROOT)) { "FL" -> "Enchente"; "WF" -> "Incendio florestal"; "TC" -> "Ciclone tropical"; "DR" -> "Seca"; "EQ" -> "Terremoto"; "VO" -> "Erupcao vulcanica"; else -> "Evento meteorologico" }
                         val titulo = traduzirNomeEvento(f.properties.name, tipo)
-                        val desc = f.properties.description?.replace(Regex("<[^>]*>"), " ")?.trim()?.take(400) ?: "Evento $tipo GDACS nivel $nivel"
+                        val desc = f.properties.description?.replace(Regex("""<[^>]*>"""), " ")?.trim()?.take(400) ?: "Evento $tipo GDACS nivel $nivel"
                         lista.add(AlertaRota(f.properties.eventid ?: "gdacs-${latE}-${lonE}", titulo, formatarDataAlerta(f.properties.pubDate), "$tipo - ${String.format(java.util.Locale.getDefault(), "%.0f km de %s", dist, localNome)} - GDACS", nivel, tipo, latE, lonE, dist, cidade = localNome, descricao = desc, fonte = "GDACS"))
                     }
-                } catch(e:Exception){ android.util.Log.e("SafePoint","Hist GDACS erro ${e.message}") }
-                // USGS tambem no historico para nao ficar vazio
+                } catch(e:Exception){}
                 try {
                     UsgsRepository.buscarUltimos30Dias().forEach { q ->
                         val dist = calcularDistancia(lat, lon, q.latitude, q.longitude)
@@ -1494,8 +1472,7 @@ object OsrmRepository {
                         val nivel = when { q.magnitude >= 6.5 -> "Critica"; q.magnitude >= 5.0 -> "Alta"; q.magnitude >= 3.5 -> "Media"; else -> "Baixa" }
                         lista.add(AlertaRota("usgs-${q.timestamp}", traduzirNomeEvento(q.nome, "Terremoto"), java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt","BR")).format(java.util.Date(q.timestamp)), "Terremoto M${String.format(java.util.Locale.US,"%.1f", q.magnitude)} - ${String.format(java.util.Locale.getDefault(), "%.0f km", dist)} - USGS", nivel, "Terremoto", q.latitude, q.longitude, dist, cidade = localNome, descricao = "${q.nome} - Magnitude ${q.magnitude} - USGS", fonte = "USGS"))
                     }
-                } catch(e:Exception){ android.util.Log.e("SafePoint","Hist USGS erro ${e.message}") }
-                // EONET no historico
+                } catch(e:Exception){}
                 try {
                     val eonet = EonetRepository.buscarEventos()
                     eonet.events.forEach { ev ->
@@ -1515,14 +1492,12 @@ object OsrmRepository {
                     }
                 } catch(e:Exception){}
                 alertasHistorico = lista.sortedBy { it.distancia }.take(50)
-                if (lista.isEmpty()) erroFonte = "Nenhum alerta GDACS/USGS/EONET em 3000km de $localNome. Tente buscar pais maior. Fontes reais consultadas."
+                if (lista.isEmpty()) erroFonte = "Nenhum alerta GDACS/USGS/EONET em 3000km de $localNome. Tente buscar pais maior."
                 else erroFonte = null
                 ultimaAtualizacao = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt","BR")).format(java.util.Date())
-            } catch (e: Exception) { erroFonte = "Falha GDACS/USGS: ${e.message}" }
+            } catch (e: Exception) { erroFonte = "Falha: ${e.message}" }
             finally { carregando = false }
         }
-    }
-
     }
     fun pesquisarLocal() {
         val termo = buscaLocal.trim()
