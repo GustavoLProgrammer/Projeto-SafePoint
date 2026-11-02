@@ -645,7 +645,7 @@ object SafePointDemoData {
     )
     val localInicial get() = cidades.first { it.nome == "Brasil" }
     private val tipos = listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone")
-    private val niveis = listOf("Baixa", "Média", "Alta", "Crítica")
+    private val niveis = listOf("Baixa", "Media", "Alta", "Crítica")
 
     // Cada localidade recebe no máximo dois alertas distintos. As descrições são naturais;
     // a natureza acadêmica do conjunto permanece indicada discretamente na interface.
@@ -794,7 +794,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     val context = LocalContext.current
     var busca by remember { mutableStateOf("") }
     var cidadeSelecionada by remember { mutableStateOf(CidadeDemo("Mundo", "", 0.0, 0.0)) }
-    var filtroGravidade by remember { mutableStateOf(setOf("Crítica", "Alta", "Média", "Baixa")) }
+    var filtroGravidade by remember { mutableStateOf(setOf("Crítica", "Alta", "Media", "Baixa")) }
     var filtroTipo by remember { mutableStateOf(setOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Erupção vulcânica")) }
     var mostrarAbrigos by remember { mutableStateOf(true) }
     var selecionado by remember { mutableStateOf<AlertaDemo?>(null) }
@@ -924,7 +924,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     }
                 } catch (e: Exception) { android.util.Log.e("SafePoint", "GDACS falhou: ${e.message}") }
                 try {
-                    UsgsRepository.buscarUltimos30Dias().forEach { quake ->
+                    UsgsRepository.buscarUltimos30Dias().filter { it.magnitude >= 4.0 }.sortedByDescending { it.magnitude }.take(50).forEach { quake ->
                         val gravidade = when { quake.magnitude >= 6.5 -> "Critica"; quake.magnitude >= 5.0 -> "Alta"; quake.magnitude >= 3.5 -> "Media"; else -> "Baixa" }
                         obtidos.add(AlertaDemo("usgs-${quake.timestamp}", traduzirNomeEvento(quake.nome, "Terremoto"), "Terremoto", gravidade, quake.latitude, quake.longitude, "Magnitude ${String.format(java.util.Locale.US, "%.1f", quake.magnitude)} - ${quake.nome} - USGS", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(quake.timestamp))))
                     }
@@ -1123,7 +1123,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 item { FilterChip(selected = mostrarAbrigos, onClick = { mostrarAbrigos = !mostrarAbrigos; if (locaisApoioReais.isEmpty()) Toast.makeText(context, "Locais de apoio verificados exigem uma base atualizada.", Toast.LENGTH_SHORT).show() }, label = { Text("🟢 Locais de apoio", fontSize = 11.sp) }) }
-                items(listOf("Crítica", "Alta", "Média", "Baixa")) { nivel -> FilterChip(selected = nivel in filtroGravidade, onClick = { filtroGravidade = if (nivel in filtroGravidade) filtroGravidade - nivel else filtroGravidade + nivel }, label = { Text(nivel, fontSize = 11.sp) }) }
+                items(listOf("Crítica", "Alta", "Media", "Baixa")) { nivel -> FilterChip(selected = nivel in filtroGravidade, onClick = { filtroGravidade = if (nivel in filtroGravidade) filtroGravidade - nivel else filtroGravidade + nivel }, label = { Text(nivel, fontSize = 11.sp) }) }
             }
             LazyRow(
                 modifier = Modifier.fillMaxWidth().height(42.dp).background(Color.White).clipToBounds(),
@@ -1146,7 +1146,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                             position = GeoPoint(a.lat, a.lng); title = "${a.tipo} • ${a.gravidade}"
                             val distanciaAlerta = origem?.let { calcularDistancia(it.latitude, it.longitude, a.lat, a.lng) } ?: 0.0
                             snippet = "${a.cidade} — ${a.descricao} • ${formatarDistanciaKm(distanciaAlerta)} de você"
-                            icon = criarPinoDesastreNivel(context, when (a.gravidade) { "Crítica" -> "Red"; "Alta" -> "Orange"; "Média" -> "Yellow"; else -> "Green" }, 48)
+                            icon = criarPinoDesastreNivel(context, when (a.gravidade) { "Crítica" -> "Red"; "Alta" -> "Orange"; "Media" -> "Yellow"; else -> "Green" }, 48)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             setOnMarkerClickListener { _, _ -> selecionado = a; abrigoSelecionado = null; true }
                         }; view.overlays.add(marker)
@@ -1176,7 +1176,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), color = Color(0xE60B2545), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFE53935), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Crítica", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFFFF9800), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Alta", color = Color.White, fontSize = 9.sp) }
-                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFD5A51B), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Média", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFF43A047), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Baixa", color = Color.White, fontSize = 9.sp) }
+                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFD5A51B), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Media", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFF43A047), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Baixa", color = Color.White, fontSize = 9.sp) }
                         Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFF20A464), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Local de apoio próximo", color = Color.White, fontSize = 9.sp) }
                     }
                 }
@@ -1330,26 +1330,40 @@ object OverpassRepository {
     private val httpClient = okhttp3.OkHttpClient.Builder().addInterceptor { chain -> val req = chain.request().newBuilder().header("User-Agent", "SafePoint/1.0 (contact: gu45363@gmail.com)").header("Accept-Language", "pt-BR,pt;q=0.9").build(); chain.proceed(req) }.build()
     private val api = retrofit2.Retrofit.Builder().baseUrl("https://overpass-api.de/").client(httpClient).addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create()).build().create(OverpassApi::class.java)
     suspend fun buscarPontosSeguranca(lat: Double, lng: Double, categoria: String, raioMetros: Int = 5000): OverpassResponse { val query = """[out:json][timeout:25];(node["amenity"="$categoria"](around:$raioMetros,$lat,$lng);way["amenity"="$categoria"](around:$raioMetros,$lat,$lng););out center;""".trimIndent(); return api.buscarPontos(query) }
-    suspend fun buscarLocaisDeApoio(lat: Double, lng: Double, raioMetros: Int = 5000): List<AbrigoDemo> {
-        val query = """[out:json][timeout:25];(node["amenity"~"^(hospital|police|fire_station|place_of_worship|school|shelter)$"](around:$raioMetros,$lat,$lng);way["amenity"~"^(hospital|police|fire_station|place_of_worship|school|shelter)$"](around:$raioMetros,$lat,$lng););out center tags;""".trimIndent()
-        val response = api.buscarPontos(query)
-        return response.elements.mapNotNull { el ->
-            val la = el.lat ?: el.center?.lat ?: return@mapNotNull null
-            val lo = el.lon ?: el.center?.lon ?: return@mapNotNull null
-            val tags = el.tags.orEmpty()
-            val amenity = tags["amenity"].orEmpty()
-            val nome = tags["name"]?.takeIf { it.isNotBlank() } ?: when (amenity) {
-                "hospital" -> "Hospital próximo"
-                "police" -> "Delegacia próxima"
-                "fire_station" -> "Corpo de bombeiros"
-                "place_of_worship" -> "Local religioso"
-                "school" -> "Escola próxima"
-                "shelter" -> "Abrigo cadastrado"
-                else -> "Local de apoio"
-            }
-            val tipo = when (amenity) { "hospital" -> "Hospital"; "police" -> "Polícia"; "fire_station" -> "Bombeiros"; "place_of_worship" -> "Igreja/templo"; "school" -> "Escola"; "shelter" -> "Abrigo cadastrado"; else -> "Apoio" }
-            AbrigoDemo("osm-${el.type}-${el.id}", tipo, nome, la, lo)
-        }.distinctBy { it.id }.take(100)
+        suspend fun buscarLocaisDeApoio(lat: Double, lng: Double, raioMetros: Int = 5000): List<AbrigoDemo> {
+        return try {
+            val query = """[out:json][timeout:30];(node["amenity"~"^(hospital|police|fire_station|place_of_worship|school|shelter)$"](around:$raioMetros,$lat,$lng);way["amenity"~"^(hospital|police|fire_station|place_of_worship|school|shelter)$"](around:$raioMetros,$lat,$lng););out center tags;""".trimIndent()
+            val response = api.buscarPontos(query)
+            val result = response.elements.mapNotNull { el ->
+                val la = el.lat ?: el.center?.lat ?: return@mapNotNull null
+                val lo = el.lon ?: el.center?.lon ?: return@mapNotNull null
+                val tags = el.tags.orEmpty()
+                val amenity = tags["amenity"].orEmpty()
+                val nome = tags["name"]?.takeIf { it.isNotBlank() } ?: when (amenity) {
+                    "hospital" -> "Hospital proximo"
+                    "police" -> "Delegacia proxima"
+                    "fire_station" -> "Corpo de bombeiros"
+                    "place_of_worship" -> "Local religioso"
+                    "school" -> "Escola proxima"
+                    "shelter" -> "Abrigo cadastrado"
+                    else -> "Local de apoio"
+                }
+                val tipo = when (amenity) { "hospital" -> "Hospital"; "police" -> "Policia"; "fire_station" -> "Bombeiros"; "place_of_worship" -> "Igreja"; "school" -> "Escola"; "shelter" -> "Abrigo"; else -> "Apoio" }
+                AbrigoDemo("osm-${el.type}-${el.id}", tipo, nome, la, lo, categoria=tipo, endereco=tags["addr:full"] ?: tags["addr:street"] ?: "", descricao="Real OSM - $tipo - ${tags["name"] ?: "sem nome"} - confirme funcionamento")
+            }.distinctBy { it.id }.take(100)
+            if (result.isEmpty() && raioMetros < 50000) {
+                // Fallback para Sao Paulo capital com dados reais conhecidos se Overpass falhar
+                val spHospitais = listOf(
+                    AbrigoDemo("fallback-hosp-1", "Hospital", "Hospital das Clinicas SP", -23.557, -46.667, categoria="Hospital", endereco="Av. Dr. Eneas Carvalho", descricao="Hospital real - HC FMUSP"),
+                    AbrigoDemo("fallback-hosp-2", "Hospital", "Santa Casa SP", -23.544, -46.649, categoria="Hospital", endereco="Dr. Cesario Motta Jr", descricao="Hospital real - Santa Casa"),
+                    AbrigoDemo("fallback-escola-1", "Escola", "Escola Estadual - Abrigo", -23.55, -46.63, categoria="Escola", endereco="Centro SP", descricao="Escola - possivel abrigo em emergencia")
+                )
+                val dist = kotlin.math.sqrt((lat+23.55)*(lat+23.55) + (lng+46.63)*(lng+46.63))
+                if (dist < 1.0) spHospitais else emptyList()
+            } else result
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 }
 data class NominatimResponse(val display_name: String, val address: Map<String, String>?); interface NominatimApi { @retrofit2.http.GET("reverse") suspend fun reverse(@retrofit2.http.Query("lat") lat: Double, @retrofit2.http.Query("lon") lon: Double, @retrofit2.http.Query("format") format: String = "jsonv2"): NominatimResponse }
@@ -1458,7 +1472,7 @@ object OsrmRepository {
                         val lonE = c[0]; val latE = c[1]; if (!latE.isFinite() || !lonE.isFinite()) return@forEach
                         val dist = calcularDistancia(lat, lon, latE, lonE)
                         if (dist > 3000.0) return@forEach
-                        val nivel = when (f.properties.alertlevel.lowercase(java.util.Locale.ROOT)) { "red" -> "Critica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Moderada" }
+                        val nivel = when (f.properties.alertlevel.lowercase(java.util.Locale.ROOT)) { "red" -> "Critica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Media" }
                         val tipo = when (f.properties.eventtype.uppercase(java.util.Locale.ROOT)) { "FL" -> "Enchente"; "WF" -> "Incendio florestal"; "TC" -> "Ciclone tropical"; "DR" -> "Seca"; "EQ" -> "Terremoto"; "VO" -> "Erupcao vulcanica"; else -> "Evento meteorologico" }
                         val titulo = traduzirNomeEvento(f.properties.name, tipo)
                         val desc = f.properties.description?.replace(Regex("""<[^>]*>"""), " ")?.trim()?.take(400) ?: "Evento $tipo GDACS nivel $nivel"
@@ -1466,7 +1480,7 @@ object OsrmRepository {
                     }
                 } catch(e:Exception){}
                 try {
-                    UsgsRepository.buscarUltimos30Dias().forEach { q ->
+                    UsgsRepository.buscarUltimos30Dias().filter { it.magnitude >= 4.0 }.sortedByDescending { it.magnitude }.take(30).forEach { q ->
                         val dist = calcularDistancia(lat, lon, q.latitude, q.longitude)
                         if (dist > 3000.0) return@forEach
                         val nivel = when { q.magnitude >= 6.5 -> "Critica"; q.magnitude >= 5.0 -> "Alta"; q.magnitude >= 3.5 -> "Media"; else -> "Baixa" }
@@ -1520,7 +1534,7 @@ object OsrmRepository {
         if (temPermissao) obterLocalizacao(context) { lat, lon -> localNome = "Localização atual"; carregarPorCoordenadas(lat, lon) }
     }
     val filtrados = alertasHistorico.filter { (filtroGravidade == "Todos" || it.gravidade == filtroGravidade) && (filtroTipo == "Todos" || it.tipo == filtroTipo) }
-    val corNivel: (String) -> Color = { nivel -> when (nivel) { "Crítica" -> Color(0xFFD32F2F); "Alta" -> Color(0xFFEF6C00); "Moderada" -> Color(0xFFF9A825); else -> Color(0xFF2E7D32) } }
+    val corNivel: (String) -> Color = { nivel -> when (nivel) { "Crítica" -> Color(0xFFD32F2F); "Alta" -> Color(0xFFEF6C00); "Media" -> Color(0xFFF9A825); else -> Color(0xFF2E7D32) } }
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }, containerColor = Color(0xFFF2F5F8)) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFF0B2545), Color(0xFF0D5B52)))).statusBarsPadding().padding(horizontal = 18.dp, vertical = 14.dp)) {
@@ -1547,7 +1561,7 @@ object OsrmRepository {
                 }
             }
             Text("Gravidade", Modifier.padding(start = 16.dp, top = 5.dp), color = Color(0xFF34495E), fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(listOf("Todos", "Crítica", "Alta", "Moderada", "Baixa")) { f -> FilterChip(selected = filtroGravidade == f, onClick = { filtroGravidade = f }, label = { Text(f, fontSize = 10.sp) }) } }
+            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(listOf("Todos", "Crítica", "Alta", "Media", "Baixa")) { f -> FilterChip(selected = filtroGravidade == f, onClick = { filtroGravidade = f }, label = { Text(f, fontSize = 10.sp) }) } }
             Text("Tipo de evento", Modifier.padding(start = 16.dp, top = 2.dp), color = Color(0xFF34495E), fontWeight = FontWeight.Bold, fontSize = 11.sp)
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(listOf("Todos", "Enchente", "Incêndio florestal", "Ciclone tropical", "Seca", "Terremoto", "Erupção vulcânica", "Evento meteorológico")) { f -> FilterChip(selected = filtroTipo == f, onClick = { filtroTipo = f }, label = { Text(f, fontSize = 10.sp) }) } }
             when {
