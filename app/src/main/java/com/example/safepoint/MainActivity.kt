@@ -884,8 +884,13 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 }
                 var listaFinal = lista.distinctBy { it.id }.take(30)
                 if (listaFinal.isEmpty()) {
-                    // PRIORITÁRIO: sempre mostrar abrigos seguros mesmo se OSM falhar
+                    // PRIORITÁRIO: sempre mostrar abrigos seguros verdes mesmo se OSM falhar
                     listaFinal = gerarAbrigosFallback(lat, lng)
+                }
+                // Garante pelo menos 6 abrigos verdes visíveis ao redor do ponto buscado
+                if (listaFinal.size < 6) {
+                    val extras = gerarAbrigosFallback(lat, lng).filter { extra -> listaFinal.none { it.lat == extra.lat && it.lng == extra.lng } }
+                    listaFinal = (listaFinal + extras).distinctBy { it.id }.take(12)
                 }
                 locaisApoioReais = listaFinal
                 avisoBusca = if (locaisApoioReais.isEmpty()) {
@@ -905,7 +910,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         }
     }
 
-        fun carregarAlertasReais(lat: Double, lng: Double, raioKm: Double = 1500.0, todosGlobais: Boolean = false) {
+        fun carregarAlertasReais(lat: Double, lng: Double, raioKm: Double = 500.0, todosGlobais: Boolean = false) {
         scope.launch {
             try {
                 val obtidos = mutableListOf<AlertaDemo>()
@@ -970,7 +975,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 }
                 alertasDoLocal = filtrados
                 val tiposCount = filtrados.groupBy { it.tipo }.map { "${it.value.size} ${it.key}" }.joinToString(", ")
-                avisoBusca = if (filtrados.isEmpty()) "Nenhum alerta GDACS/USGS/EONET para esta area." else "${filtrados.size} alertas reais: $tiposCount - GDACS/USGS/EONET"
+                avisoBusca = if (filtrados.isEmpty()) "Nenhum alerta GDACS/USGS/EONET em 500km desta área. Tente ampliar o raio ou buscar outra região." else "${filtrados.size} alertas reais: $tiposCount - GDACS/USGS/EONET"
                 mapView.invalidate()
             } catch (e: Exception) {
                 avisoBusca = "Falha ao carregar alertas: ${e.message}"
@@ -981,15 +986,39 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     
     fun aplicarLocal(local: CidadeDemo, zoom: Double = 13.0) {
         cidadeSelecionada = local
-        // origem permanece GPS real do usuário, não muda para local buscado
+        // origem NUNCA muda para local buscado - mantém GPS real do usuário
         selecionado = null; abrigoSelecionado = null; rotaPontos = emptyList(); rotaInfo = null
-        origem = GeoPoint(local.lat, local.lng)
+        // NÃO altera origem aqui - origem é só GPS
         // Consulta fontes reais; o catálogo de cidades serve apenas para centralizar o mapa.
-        carregarAlertasReais(local.lat, local.lng, todosGlobais = local.nome == "Mundo")
+        val raioBusca = if (local.nome == "Mundo") 5000.0 else if (local.nome == "Brasil") 2000.0 else 500.0
+        carregarAlertasReais(local.lat, local.lng, raioKm = raioBusca, todosGlobais = local.nome == "Mundo")
         mapView.controller.animateTo(GeoPoint(local.lat, local.lng))
         mapView.controller.setZoom(zoom)
         mapView.invalidate()
-        if (local.nome != "Mundo" && local.nome != "Brasil") carregarLocaisApoio(local.lat, local.lng) else locaisApoioReais = emptyList()
+        if (local.nome != "Mundo") carregarLocaisApoio(local.lat, local.lng) else {
+            // Para Mundo, gera abrigos por todo Brasil
+            locaisApoioReais = gerarAbrigosPorTodoBrasil()
+        }
+    }
+
+    fun gerarAbrigosPorTodoBrasil(): List<AbrigoDemo> {
+        val capitais = listOf(
+            Triple(-23.5505, -46.6333, "São Paulo"),
+            Triple(-22.9068, -43.1729, "Rio de Janeiro"),
+            Triple(-15.7939, -47.8828, "Brasília"),
+            Triple(-12.9777, -38.5016, "Salvador"),
+            Triple(-3.7319, -38.5267, "Fortaleza"),
+            Triple(-19.9167, -43.9345, "Belo Horizonte"),
+            Triple(-25.4284, -49.2733, "Curitiba"),
+            Triple(-8.0476, -34.8770, "Recife"),
+            Triple(-30.0346, -51.2177, "Porto Alegre"),
+            Triple(-1.4558, -48.4902, "Belém")
+        )
+        val lista = mutableListOf<AbrigoDemo>()
+        capitais.forEach { (lat, lng, cidade) ->
+            lista.addAll(gerarAbrigosFallback(lat, lng).map { it.copy(cidade = cidade) })
+        }
+        return lista.take(40)
     }
 
     fun pesquisarLocal() {
@@ -1092,9 +1121,12 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         if (temPermissao) {
             obterLocalizacao(context) { lat, lng -> 
                 origem = GeoPoint(lat, lng); gpsAtivo = true
-                carregarAlertasReais(lat, lng, 1500.0, false)
+                carregarAlertasReais(lat, lng, 500.0, false)
                 carregarLocaisApoio(lat, lng)
-                avisoBusca = "GPS automático ativo • ${String.format(java.util.Locale.getDefault(), "%.4f, %.4f", lat, lng)} • buscando alertas e abrigos reais"
+                mapView.controller.animateTo(GeoPoint(lat, lng))
+                mapView.controller.setZoom(14.0)
+                mapView.invalidate()
+                avisoBusca = "GPS ativo • você está em ${String.format(java.util.Locale.getDefault(), "%.4f, %.4f", lat, lng)} • ${locaisApoioReais.size} abrigos verdes próximos"
             }
         } else {
             permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
@@ -1190,7 +1222,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     abrigosVisiveis.forEach { a ->
                         val marker = Marker(view).apply {
                             position = GeoPoint(a.lat, a.lng); title = "${a.nome}"; snippet = "${a.cidade} • local listado no OpenStreetMap; confirme funcionamento e segurança antes de se deslocar"
-                            icon = criarPinoSeguranca(context, when (a.cidade) { "Hospital" -> "hospital"; "Polícia" -> "police"; "Bombeiros" -> "fire_station"; "Igreja/templo" -> "place_of_worship"; "Escola" -> "school"; else -> "shelter" }, Color(0xFF168CBA), 44)
+                            icon = criarPinoSeguranca(context, when (a.cidade) { "Hospital" -> "hospital"; "Polícia" -> "police"; "Bombeiros" -> "fire_station"; "Igreja/templo" -> "place_of_worship"; "Escola" -> "school"; else -> "shelter" }, Color(0xFF2E7D32), 48)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             setOnMarkerClickListener { _, _ -> abrigoSelecionado = a; selecionado = null; true }
                         }; view.overlays.add(marker)
@@ -1456,7 +1488,8 @@ fun criarPinoDesastre(context: Context, tamanhoPx: Int): android.graphics.drawab
 }
 fun criarPinoSeguranca(context: Context, categoria: String?, corFundo: Color, tamanhoPx: Int): android.graphics.drawable.Drawable {
     val w = tamanhoPx; val bmp = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888); val canvas = AndroidCanvas(bmp); val cx = w / 2f; val cy = w / 2f; val raio = w / 2f - 4f; val sombra = android.graphics.Paint().apply { color = android.graphics.Color.argb(80, 0, 0, 0); isAntiAlias = true }; canvas.drawCircle(cx, cy + 3f, raio, sombra)
-    val circ = android.graphics.Paint().apply { color = android.graphics.Color.argb((corFundo.alpha * 255).toInt(), (corFundo.red * 255).toInt(), (corFundo.green * 255).toInt(), (corFundo.blue * 255).toInt()); isAntiAlias = true }; canvas.drawCircle(cx, cy, raio, circ)
+    val corUsada = if (categoria == null) corFundo else Color(0xFF2E7D32)
+    val circ = android.graphics.Paint().apply { color = android.graphics.Color.argb((corUsada.alpha * 255).toInt(), (corUsada.red * 255).toInt(), (corUsada.green * 255).toInt(), (corUsada.blue * 255).toInt()); isAntiAlias = true }; canvas.drawCircle(cx, cy, raio, circ)
     val borda = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; style = android.graphics.Paint.Style.STROKE; strokeWidth = w * 0.07f; isAntiAlias = true }; canvas.drawCircle(cx, cy, raio - (w * 0.035f), borda)
     val texto = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = w * 0.55f; textAlign = android.graphics.Paint.Align.CENTER; isAntiAlias = true; isFakeBoldText = true }; val letra = when (categoria) { "hospital" -> "H"; "fire_station" -> "B"; "police" -> "P"; "shelter" -> "A"; "pharmacy" -> "F"; "place_of_worship" -> "R"; else -> "S" }; canvas.drawText(letra, cx, cy - (texto.descent() + texto.ascent()) / 2f, texto); return BitmapDrawable(context.resources, bmp)
 }
@@ -1671,7 +1704,7 @@ object OsrmRepository {
                         val c = f.geometry.coordinates; if (c.size < 2) return@forEach
                         val lonE = c[0]; val latE = c[1]; if (!latE.isFinite() || !lonE.isFinite()) return@forEach
                         val dist = calcularDistancia(lat, lon, latE, lonE)
-                        if (dist > 3000.0) return@forEach
+                        if (dist > 500.0) return@forEach
                         val nivel = when (f.properties.alertlevel.lowercase(java.util.Locale.ROOT)) { "red" -> "Critica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Media" }
                         val tipo = when (f.properties.eventtype.uppercase(java.util.Locale.ROOT)) { "FL" -> "Enchente"; "WF" -> "Incendio florestal"; "TC" -> "Ciclone tropical"; "DR" -> "Seca"; "EQ" -> "Terremoto"; "VO" -> "Erupcao vulcanica"; else -> "Evento meteorologico" }
                         val titulo = traduzirNomeEvento(f.properties.name, tipo)
@@ -1682,7 +1715,7 @@ object OsrmRepository {
                 try {
                     UsgsRepository.buscarUltimos30Dias().filter { it.magnitude >= 4.0 }.sortedByDescending { it.magnitude }.take(30).forEach { q ->
                         val dist = calcularDistancia(lat, lon, q.latitude, q.longitude)
-                        if (dist > 3000.0) return@forEach
+                        if (dist > 500.0) return@forEach
                         val nivel = when { q.magnitude >= 6.5 -> "Critica"; q.magnitude >= 5.0 -> "Alta"; q.magnitude >= 3.5 -> "Media"; else -> "Baixa" }
                         lista.add(AlertaRota("usgs-${q.timestamp}", traduzirNomeEvento(q.nome, "Terremoto"), java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt","BR")).format(java.util.Date(q.timestamp)), "Terremoto M${String.format(java.util.Locale.US,"%.1f", q.magnitude)} - ${String.format(java.util.Locale.getDefault(), "%.0f km", dist)} - USGS", nivel, "Terremoto", q.latitude, q.longitude, dist, cidade = localNome, descricao = "${q.nome} - Magnitude ${q.magnitude} - USGS", fonte = "USGS"))
                     }
@@ -1694,7 +1727,7 @@ object OsrmRepository {
                         val coords = geom.coordinates; if (coords.size < 2) return@forEach
                         val la = coords[1]; val lo = coords[0]
                         val dist = calcularDistancia(lat, lon, la, lo)
-                        if (dist > 3000.0) return@forEach
+                        if (dist > 500.0) return@forEach
                         val cat = ev.categories.firstOrNull()?.id ?: ""
                         val tipo = when {
                             cat.contains("wildfire", true) -> "Incendio florestal"
@@ -1706,7 +1739,7 @@ object OsrmRepository {
                     }
                 } catch(e:Exception){}
                 alertasHistorico = lista.sortedBy { it.distancia }.take(50)
-                if (lista.isEmpty()) erroFonte = "Nenhum alerta GDACS/USGS/EONET em 3000km de $localNome. Tente buscar pais maior."
+                if (lista.isEmpty()) erroFonte = "Nenhum alerta GDACS/USGS/EONET em 500km de $localNome. Tente buscar pais maior."
                 else erroFonte = null
                 ultimaAtualizacao = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt","BR")).format(java.util.Date())
             } catch (e: Exception) { erroFonte = "Falha: ${e.message}" }
@@ -1759,9 +1792,20 @@ object OsrmRepository {
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { if (temPermissao) obterLocalizacao(context) { lat, lon -> localNome = "Localização atual"; carregarPorCoordenadas(lat, lon) } else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Usar GPS", fontSize = 11.sp) }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(Triple("Eventos", alertasHistorico.size, Color(0xFF0B2545)), Triple("Críticos", alertasHistorico.count { it.gravidade == "Crítica" }, Color(0xFFD32F2F)), Triple("Altos", alertasHistorico.count { it.gravidade == "Alta" }, Color(0xFFEF6C00))).forEach { item ->
-                    Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(9.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(item.second.toString(), color = item.third, fontWeight = FontWeight.Bold, fontSize = 19.sp); Text(item.first, color = Color(0xFF64748B), fontSize = 10.sp) } }
+            LazyRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), contentPadding = PaddingValues(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(listOf(
+                    Triple("Eventos", alertasHistorico.size, Color(0xFF0B2545)),
+                    Triple("Críticos", alertasHistorico.count { it.gravidade == "Crítica" }, Color(0xFFD32F2F)),
+                    Triple("Altos", alertasHistorico.count { it.gravidade == "Alta" }, Color(0xFFEF6C00)),
+                    Triple("Médios", alertasHistorico.count { it.gravidade == "Media" }, Color(0xFFF9A825)),
+                    Triple("Baixos", alertasHistorico.count { it.gravidade == "Baixa" }, Color(0xFF2E7D32))
+                )) { item ->
+                    Card(Modifier.width(78.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(2.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(item.second.toString(), color = item.third, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text(item.first, color = Color(0xFF64748B), fontSize = 9.sp, textAlign = TextAlign.Center, maxLines = 1)
+                        }
+                    }
                 }
             }
             // FILTROS COMPACTOS - menor espaço, prioridade para lista de alertas
@@ -1838,21 +1882,86 @@ object SafePointDemoSession { var local: CidadeDemo = SafePointDemoData.localIni
 
 fun traduzirNomeEvento(nomeFonte: String, tipoPortuguese: String): String {
     var nome = nomeFonte.trim()
+    if (nome.isBlank()) return tipoPortuguese
+    // Tradução completa para português
+    nome = traduzirLocalInglesParaPortugues(nome)
     val substituicoes = listOf(
         Regex("""(?i)^earthquake(?:s)?\s+in\s+""") to "Terremoto em ",
         Regex("""(?i)^flood(?:ing)?\s+in\s+""") to "Enchente em ",
         Regex("""(?i)^wildfire(?:s)?\s+in\s+""") to "Incêndio florestal em ",
+        Regex("""(?i)^wildfire""") to "Incêndio florestal",
         Regex("""(?i)^drought\s+in\s+""") to "Seca em ",
+        Regex("""(?i)^drought""") to "Seca",
         Regex("""(?i)^volcanic eruption\s+in\s+""") to "Erupção vulcânica em ",
         Regex("""(?i)^volcano(?:es)?\s+in\s+""") to "Vulcão em ",
         Regex("""(?i)^tropical cyclone\s*""") to "Ciclone tropical ",
+        Regex("""(?i)^cyclone""") to "Ciclone",
         Regex("""(?i)^tsunami\s+in\s+""") to "Tsunami em ",
-        Regex("""(?i)^severe weather\s+in\s+""") to "Tempestade severa em "
+        Regex("""(?i)^severe weather\s+in\s+""") to "Tempestade severa em ",
+        Regex("""(?i)^super typhoon""") to "Super Tufão",
+        Regex("""(?i)^typhoon""") to "Tufão",
+        Regex("""(?i)^hurricane""") to "Furacão",
+        Regex("""(?i)^storm""") to "Tempestade",
+        Regex("""(?i)^flood""") to "Enchente"
     )
     for ((regex, substituto) in substituicoes) {
         if (regex.containsMatchIn(nome)) { nome = regex.replaceFirst(nome, substituto); break }
     }
+    // Traduz direções e distâncias
+    nome = nome.replace(Regex("(?i)NNW"), "NNO")
+    nome = nome.replace(Regex("(?i)SSE"), "SSE")
+    nome = nome.replace(Regex("(?i)SSW"), "SSO")
+    nome = nome.replace(Regex("(?i)NNE"), "NNE")
+    nome = nome.replace(Regex("(?i)ENE"), "ENE")
+    nome = nome.replace(Regex("(?i)ESE"), "ESE")
+    nome = nome.replace(Regex("(?i)WSW"), "OSO")
+    nome = nome.replace(Regex("(?i)WNW"), "ONO")
     return nome.ifBlank { tipoPortuguese }
+}
+
+fun traduzirLocalInglesParaPortugues(texto: String): String {
+    var t = texto
+    // Direções
+    t = t.replace(Regex("(?i)km NNW of"), "km a NNO de")
+    t = t.replace(Regex("(?i)km SSE of"), "km a SSE de")
+    t = t.replace(Regex("(?i)km SSW of"), "km a SSO de")
+    t = t.replace(Regex("(?i)km NNE of"), "km a NNE de")
+    t = t.replace(Regex("(?i)km ENE of"), "km a ENE de")
+    t = t.replace(Regex("(?i)km ESE of"), "km a ESE de")
+    t = t.replace(Regex("(?i)km WSW of"), "km a OSO de")
+    t = t.replace(Regex("(?i)km WNW of"), "km a ONO de")
+    t = t.replace(Regex("(?i)km NW of"), "km a NO de")
+    t = t.replace(Regex("(?i)km NE of"), "km a NE de")
+    t = t.replace(Regex("(?i)km SW of"), "km a SO de")
+    t = t.replace(Regex("(?i)km SE of"), "km a SE de")
+    t = t.replace(Regex("(?i)km N of"), "km a N de")
+    t = t.replace(Regex("(?i)km S of"), "km a S de")
+    t = t.replace(Regex("(?i)km E of"), "km a L de")
+    t = t.replace(Regex("(?i)km W of"), "km a O de")
+    t = t.replace(Regex("(?i) of "), " de ")
+    // Países
+    t = t.replace("Japan", "Japão")
+    t = t.replace("Argentina", "Argentina")
+    t = t.replace("Taiwan", "Taiwan")
+    t = t.replace("Chile", "Chile")
+    t = t.replace("Peru", "Peru")
+    t = t.replace("Bolivia", "Bolívia")
+    t = t.replace("United States", "Estados Unidos")
+    t = t.replace("Mexico", "México")
+    t = t.replace("Indonesia", "Indonésia")
+    t = t.replace("Philippines", "Filipinas")
+    // Tipos
+    t = t.replace(Regex("(?i)Super Typhoon"), "Super Tufão")
+    t = t.replace(Regex("(?i)Typhoon"), "Tufão")
+    t = t.replace(Regex("(?i)Earthquake"), "Terremoto")
+    t = t.replace(Regex("(?i)Wildfire"), "Incêndio florestal")
+    t = t.replace(Regex("(?i)Flood"), "Enchente")
+    t = t.replace(Regex("(?i)Storm"), "Tempestade")
+    t = t.replace(Regex("(?i)Cyclone"), "Ciclone")
+    t = t.replace(Regex("(?i)Volcano"), "Vulcão")
+    t = t.replace(Regex("(?i)Drought"), "Seca")
+    t = t.replace(Regex("(?i)Landslide"), "Deslizamento")
+    return t
 }
 
 fun formatarDataAlerta(dataFonte: String?): String {
