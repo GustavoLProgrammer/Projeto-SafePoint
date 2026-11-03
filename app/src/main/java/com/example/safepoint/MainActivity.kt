@@ -996,29 +996,25 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         mapView.controller.setZoom(zoom)
         mapView.invalidate()
         if (local.nome != "Mundo") carregarLocaisApoio(local.lat, local.lng) else {
-            // Para Mundo, gera abrigos por todo Brasil
-            locaisApoioReais = gerarAbrigosPorTodoBrasil()
+            // Para Mundo, gera abrigos verdes por todo Brasil (10 capitais)
+            val capitais = listOf(
+                Triple(-23.5505, -46.6333, "São Paulo"),
+                Triple(-22.9068, -43.1729, "Rio de Janeiro"),
+                Triple(-15.7939, -47.8828, "Brasília"),
+                Triple(-12.9777, -38.5016, "Salvador"),
+                Triple(-3.7319, -38.5267, "Fortaleza"),
+                Triple(-19.9167, -43.9345, "Belo Horizonte"),
+                Triple(-25.4284, -49.2733, "Curitiba"),
+                Triple(-8.0476, -34.8770, "Recife"),
+                Triple(-30.0346, -51.2177, "Porto Alegre"),
+                Triple(-1.4558, -48.4902, "Belém")
+            )
+            val listaMundo = mutableListOf<AbrigoDemo>()
+            capitais.forEach { (la, lo, cidade) ->
+                listaMundo.addAll(gerarAbrigosFallback(la, lo).map { it.copy(cidade = cidade) })
+            }
+            locaisApoioReais = listaMundo.take(40)
         }
-    }
-
-    fun gerarAbrigosPorTodoBrasil(): List<AbrigoDemo> {
-        val capitais = listOf(
-            Triple(-23.5505, -46.6333, "São Paulo"),
-            Triple(-22.9068, -43.1729, "Rio de Janeiro"),
-            Triple(-15.7939, -47.8828, "Brasília"),
-            Triple(-12.9777, -38.5016, "Salvador"),
-            Triple(-3.7319, -38.5267, "Fortaleza"),
-            Triple(-19.9167, -43.9345, "Belo Horizonte"),
-            Triple(-25.4284, -49.2733, "Curitiba"),
-            Triple(-8.0476, -34.8770, "Recife"),
-            Triple(-30.0346, -51.2177, "Porto Alegre"),
-            Triple(-1.4558, -48.4902, "Belém")
-        )
-        val lista = mutableListOf<AbrigoDemo>()
-        capitais.forEach { (lat, lng, cidade) ->
-            lista.addAll(gerarAbrigosFallback(lat, lng).map { it.copy(cidade = cidade) })
-        }
-        return lista.take(40)
     }
 
     fun pesquisarLocal() {
