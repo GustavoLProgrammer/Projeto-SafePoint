@@ -87,29 +87,13 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.json.JSONArray
 import org.osmdroid.config.Configuration
-import org.json.JSONObject
-import org.json.JSONArray
 import org.osmdroid.util.GeoPoint
-import org.json.JSONObject
-import org.json.JSONArray
 import org.osmdroid.tileprovider.tilesource.XYTileSource
-import org.json.JSONObject
-import org.json.JSONArray
 import org.osmdroid.views.MapView
-import org.json.JSONObject
-import org.json.JSONArray
 import org.osmdroid.views.overlay.Marker
-import org.json.JSONObject
-import org.json.JSONArray
 import org.osmdroid.views.overlay.Overlay
-import org.json.JSONObject
-import org.json.JSONArray
 import org.osmdroid.views.overlay.Polyline
-import org.json.JSONObject
-import org.json.JSONArray
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
-import org.json.JSONObject
-import org.json.JSONArray
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.text.SimpleDateFormat
 import java.util.*
@@ -1338,8 +1322,6 @@ object OsrmRepository {
 
 // Histórico por localidade com detalhes e filtros.
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaHistoricoReal(navController: NavController) {
