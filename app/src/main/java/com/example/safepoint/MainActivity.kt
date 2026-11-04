@@ -264,7 +264,7 @@ fun MapaScreenProfissionalInventado(navController: androidx.navigation.NavContro
                                 icon=try{
                                     val w=54; val h=(w*1.4).toInt(); val bmp=Bitmap.createBitmap(w,h, Bitmap.Config.ARGB_8888); val c=android.graphics.Canvas(bmp)
                                     val paint=android.graphics.Paint().apply{ color=corPorTipoSafe(a.tipo); isAntiAlias=true }; val borda=android.graphics.Paint().apply{ color=android.graphics.Color.WHITE; style=Paint.Style.STROKE; strokeWidth=3f; isAntiAlias=true }
-                                    val path=android.graphics.Path().apply{ moveTo(w/2f,h.toFloat()); lineTo(0f,h*0.35f); arcTo(RectF(0f,0f,w.toFloat(),w.toFloat()),180f,180f); close() }
+                                    val path=android.graphics.Path().apply{ moveTo(w/2f,h.toFloat()); lineTo(0f,h*0.35f); arcTo(android.graphics.RectF(0f,0f,w.toFloat(),w.toFloat()),180f,180f); close() }
                                     c.drawPath(path,paint); c.drawPath(path,borda); BitmapDrawable(context.resources,bmp)
                                 }catch(_:Exception){ null }
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
@@ -279,7 +279,7 @@ fun MapaScreenProfissionalInventado(navController: androidx.navigation.NavContro
                                 icon=try{
                                     val w=56; val h=(w*1.4).toInt(); val bmp=Bitmap.createBitmap(w,h, Bitmap.Config.ARGB_8888); val c=android.graphics.Canvas(bmp)
                                     val paint=android.graphics.Paint().apply{ color=android.graphics.Color.rgb(46,125,50); isAntiAlias=true }; val borda=android.graphics.Paint().apply{ color=android.graphics.Color.WHITE; style=Paint.Style.STROKE; strokeWidth=3f; isAntiAlias=true }
-                                    val path=android.graphics.Path().apply{ moveTo(w/2f,h.toFloat()); lineTo(0f,h*0.35f); arcTo(RectF(0f,0f,w.toFloat(),w.toFloat()),180f,180f); close() }
+                                    val path=android.graphics.Path().apply{ moveTo(w/2f,h.toFloat()); lineTo(0f,h*0.35f); arcTo(android.graphics.RectF(0f,0f,w.toFloat(),w.toFloat()),180f,180f); close() }
                                     c.drawPath(path,paint); c.drawPath(path,borda); BitmapDrawable(context.resources,bmp)
                                 }catch(_:Exception){ null }
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
@@ -318,7 +318,7 @@ fun MapaScreenProfissionalInventado(navController: androidx.navigation.NavContro
                         Column(Modifier.weight(1f)){
                             Text(if(s!=null) "${s.tipo} • ${s.cidade}" else ab!!.nome, fontWeight=FontWeight.Bold, color=Color(0xFF0B2545), fontSize=14.sp, maxLines=2)
                             Text(if(s!=null) "${s.gravidade} • ${s.descricao.take(120)}" else "${ab!!.categoria} • ponto verde seguro #2E7D32 inventado", fontSize=10.sp, color=Color.Gray, maxLines=3)
-                            rotaInfo?.let{ Text("Dist: ${String.format("%.1f km", it.distanciaKm)} • Tempo: ${minutos} min • Chegada: $chegada", fontSize=10.sp, fontWeight=FontWeight.SemiBold, color=Color(0xFF0B2545)) }
+                            rotaInfo?.let{ Text("Dist: ${it.distanciaTexto} • Tempo: ${it.duracaoTexto} • Chegada: ${it.chegadaTexto}", fontSize=10.sp, fontWeight=FontWeight.SemiBold, color=Color(0xFF0B2545)) }
                         }
                         IconButton(onClick={ selecionado=null; abrigoSelecionado=null; rotaPontos=emptyList(); rotaInfo=null }, modifier=Modifier.size(32.dp)){ Icon(Icons.Default.Close,"Fechar") }
                     }
