@@ -206,7 +206,7 @@ fun MapaScreenProfissionalInventado(navController: androidx.navigation.NavContro
             val chegada = SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(System.currentTimeMillis()+tempo*60*1000L))
             rotaPontos = listOf(ori, GeoPoint(destLat,destLng))
             rotaInfo = criarRotaInfoSafe(dist, tempo, chegada)
-            avisoBusca = "Rota ${modoRota.titulo}: ${String.format("%.1f km", dist)} • $tempo min • chegada ${it.chegadaTexto} • linha azul"
+            avisoBusca = "Rota ${modoRota.titulo}: ${String.format("%.1f km", dist)} • $tempo min • chegada $chegada • linha azul"
             mapView.invalidate()
         }catch(e:Exception){
             val ori = origem ?: GeoPoint(-23.5505,-46.6333)
@@ -262,9 +262,9 @@ fun MapaScreenProfissionalInventado(navController: androidx.navigation.NavContro
                             val mk=Marker(view).apply{
                                 position=GeoPoint(a.lat,a.lng); title="${a.tipo} • ${a.gravidade}"; snippet="${a.cidade}"
                                 icon=try{
-                                    val w=54; val h=(w*1.4).toInt(); val bmp=Bitmap.createBitmap(w,h, Bitmap.Config.ARGB_8888); val c=Canvas(bmp)
-                                    val paint=Paint().apply{ color=corPorTipoSafe(a.tipo); isAntiAlias=true }; val borda=Paint().apply{ color=androidx.compose.ui.graphics.Color.White.toArgb(); style=Paint.Style.STROKE; strokeWidth=3f; isAntiAlias=true }
-                                    val path=Path().apply{ moveTo(w/2f,h.toFloat()); lineTo(0f,h*0.35f); arcTo(RectF(0f,0f,w.toFloat(),w.toFloat()),180f,180f); close() }
+                                    val w=54; val h=(w*1.4).toInt(); val bmp=Bitmap.createBitmap(w,h, Bitmap.Config.ARGB_8888); val c=android.graphics.Canvas(bmp)
+                                    val paint=android.graphics.Paint().apply{ color=corPorTipoSafe(a.tipo); isAntiAlias=true }; val borda=android.graphics.Paint().apply{ color=android.graphics.Color.WHITE; style=Paint.Style.STROKE; strokeWidth=3f; isAntiAlias=true }
+                                    val path=android.graphics.Path().apply{ moveTo(w/2f,h.toFloat()); lineTo(0f,h*0.35f); arcTo(RectF(0f,0f,w.toFloat(),w.toFloat()),180f,180f); close() }
                                     c.drawPath(path,paint); c.drawPath(path,borda); BitmapDrawable(context.resources,bmp)
                                 }catch(_:Exception){ null }
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
@@ -277,9 +277,9 @@ fun MapaScreenProfissionalInventado(navController: androidx.navigation.NavContro
                             val mk=Marker(view).apply{
                                 position=GeoPoint(ab.lat,ab.lng); title=ab.nome; snippet="${ab.categoria} • ponto verde #2E7D32"
                                 icon=try{
-                                    val w=56; val h=(w*1.4).toInt(); val bmp=Bitmap.createBitmap(w,h, Bitmap.Config.ARGB_8888); val c=Canvas(bmp)
-                                    val paint=Paint().apply{ color=android.graphics.Color.rgb(46,125,50); isAntiAlias=true }; val borda=Paint().apply{ color=androidx.compose.ui.graphics.Color.White.toArgb(); style=Paint.Style.STROKE; strokeWidth=3f; isAntiAlias=true }
-                                    val path=Path().apply{ moveTo(w/2f,h.toFloat()); lineTo(0f,h*0.35f); arcTo(RectF(0f,0f,w.toFloat(),w.toFloat()),180f,180f); close() }
+                                    val w=56; val h=(w*1.4).toInt(); val bmp=Bitmap.createBitmap(w,h, Bitmap.Config.ARGB_8888); val c=android.graphics.Canvas(bmp)
+                                    val paint=android.graphics.Paint().apply{ color=android.graphics.Color.rgb(46,125,50); isAntiAlias=true }; val borda=android.graphics.Paint().apply{ color=android.graphics.Color.WHITE; style=Paint.Style.STROKE; strokeWidth=3f; isAntiAlias=true }
+                                    val path=android.graphics.Path().apply{ moveTo(w/2f,h.toFloat()); lineTo(0f,h*0.35f); arcTo(RectF(0f,0f,w.toFloat(),w.toFloat()),180f,180f); close() }
                                     c.drawPath(path,paint); c.drawPath(path,borda); BitmapDrawable(context.resources,bmp)
                                 }catch(_:Exception){ null }
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
@@ -292,9 +292,9 @@ fun MapaScreenProfissionalInventado(navController: androidx.navigation.NavContro
                             val mk=Marker(view).apply{
                                 position=ori; title="Você está aqui"; snippet="Seta azul GPS - posição exata"
                                 icon=try{
-                                    val w=58; val h=58; val bmp=Bitmap.createBitmap(w,h, Bitmap.Config.ARGB_8888); val c=Canvas(bmp)
-                                    val paint=Paint().apply{ color=android.graphics.Color.rgb(25,118,210); isAntiAlias=true }; val borda=Paint().apply{ color=androidx.compose.ui.graphics.Color.White.toArgb(); style=Paint.Style.STROKE; strokeWidth=4f; isAntiAlias=true }
-                                    val path=Path().apply{ moveTo(w/2f,0f); lineTo(w.toFloat(),h*0.75f); lineTo(w*0.5f,h*0.6f); lineTo(0f,h*0.75f); close() }
+                                    val w=58; val h=58; val bmp=Bitmap.createBitmap(w,h, Bitmap.Config.ARGB_8888); val c=android.graphics.Canvas(bmp)
+                                    val paint=android.graphics.Paint().apply{ color=android.graphics.Color.rgb(25,118,210); isAntiAlias=true }; val borda=android.graphics.Paint().apply{ color=android.graphics.Color.WHITE; style=Paint.Style.STROKE; strokeWidth=4f; isAntiAlias=true }
+                                    val path=android.graphics.Path().apply{ moveTo(w/2f,0f); lineTo(w.toFloat(),h*0.75f); lineTo(w*0.5f,h*0.6f); lineTo(0f,h*0.75f); close() }
                                     c.drawPath(path,paint); c.drawPath(path,borda); BitmapDrawable(context.resources,bmp)
                                 }catch(_:Exception){ null }
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
@@ -318,7 +318,7 @@ fun MapaScreenProfissionalInventado(navController: androidx.navigation.NavContro
                         Column(Modifier.weight(1f)){
                             Text(if(s!=null) "${s.tipo} • ${s.cidade}" else ab!!.nome, fontWeight=FontWeight.Bold, color=Color(0xFF0B2545), fontSize=14.sp, maxLines=2)
                             Text(if(s!=null) "${s.gravidade} • ${s.descricao.take(120)}" else "${ab!!.categoria} • ponto verde seguro #2E7D32 inventado", fontSize=10.sp, color=Color.Gray, maxLines=3)
-                            rotaInfo?.let{ Text("Dist: ${String.format("%.1f km", it.distanciaKm)} • Tempo: ${it.duracaoMin} min • Chegada: ${it.chegadaTexto}", fontSize=10.sp, fontWeight=FontWeight.SemiBold, color=Color(0xFF0B2545)) }
+                            rotaInfo?.let{ Text("Dist: ${String.format("%.1f km", it.distanciaKm)} • Tempo: ${minutos} min • Chegada: $chegada", fontSize=10.sp, fontWeight=FontWeight.SemiBold, color=Color(0xFF0B2545)) }
                         }
                         IconButton(onClick={ selecionado=null; abrigoSelecionado=null; rotaPontos=emptyList(); rotaInfo=null }, modifier=Modifier.size(32.dp)){ Icon(Icons.Default.Close,"Fechar") }
                     }
@@ -1389,7 +1389,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 rotaPontos = rota.pontos
                 val km = rota.distanciaMetros / 1000.0
                 val minutos = (rota.duracaoSeg / 60.0).toInt().coerceAtLeast(1)
-                val duracao = if (minutos < 60) "${it.duracaoMin}utos min" else "${minutos / 60}h ${minutos % 60}min"
+                val duracao = if (minutos < 60) "${minutos} min" else "${minutos / 60}h ${minutos % 60}min"
                 val distancia = if (km < 1.0) "${rota.distanciaMetros.toInt()} m" else String.format(Locale("pt", "BR"), "%.1f km", km)
                 val chegada = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(Date(System.currentTimeMillis() + rota.duracaoSeg.toLong() * 1000L))
                 rotaInfo = RotaInfo(km, minutos, duracao, distancia, chegada)
@@ -1406,12 +1406,12 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     val dist = calcularDistancia(inicio.latitude, inicio.longitude, destino.latitude, destino.longitude)
                     val velocidade = when(modoRota){ ModoRota.A_PE -> 5.0; ModoRota.BICICLETA -> 15.0; ModoRota.ONIBUS -> 30.0; else -> 40.0 }
                     val minutos = (dist / velocidade * 60.0).toInt().coerceAtLeast(1)
-                    val duracao = if (minutos < 60) "${it.duracaoMin}utos min" else "${minutos/60}h ${minutos%60}min"
+                    val duracao = if (minutos < 60) "${minutos} min" else "${minutos/60}h ${minutos%60}min"
                     val distancia = String.format(java.util.Locale("pt","BR"), "%.1f km", dist)
                     val chegada = SimpleDateFormat("HH:mm", java.util.Locale("pt","BR")).format(Date(System.currentTimeMillis() + minutos*60*1000L))
                     rotaPontos = listOf(inicio, destino)
                     rotaInfo = RotaInfo(dist, minutos, duracao, distancia, chegada)
-                    avisoBusca = "Rota aproximada ${modoRota.titulo}: $distancia • $duracao • Chegada ${it.chegadaTexto} (offline)"
+                    avisoBusca = "Rota aproximada ${modoRota.titulo}: $distancia • $duracao • Chegada $chegada (offline)"
                     mapView.invalidate()
                 } catch (e2: Exception) {
                     avisoBusca = "Não foi possível calcular rota: ${e2.message}"
