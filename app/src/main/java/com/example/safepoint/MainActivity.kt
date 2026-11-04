@@ -956,8 +956,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                             cat.contains("earthquake", true) -> "Terremoto"
                             cat.contains("storm", true) -> "Tempestade"
                             cat.contains("cyclone", true) || cat.contains("hurricane", true) || cat.contains("typhoon", true) -> "Ciclone"
-                            cat.contains("snow", true) || cat.contains("ice", true) -> "Tempestade"
-                            cat.contains("tempExtreme", true) || cat.contains("dust", true) -> "Seca"
                             else -> "Tempestade"
                         }
                         val geom = ev.geometry.lastOrNull() ?: return@forEach
@@ -1001,37 +999,27 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         mapView.controller.setZoom(zoom)
         mapView.invalidate()
         if (local.nome != "Mundo") carregarLocaisApoio(local.lat, local.lng) else {
-            // Para Mundo, gera abrigos verdes por TODO O MUNDO - 30 capitais globais
-            val capitaisMundo = listOf(
+            // Para Mundo, gera abrigos verdes por TODO MUNDO - 26 capitais globais - solicitado
+            val capitais = listOf(
                 Triple(-23.5505, -46.6333, "São Paulo"), Triple(-22.9068, -43.1729, "Rio de Janeiro"),
-                Triple(-34.6037, -58.3816, "Buenos Aires"), Triple(-33.4489, -70.6693, "Santiago"),
-                Triple(-12.0464, -77.0428, "Lima"), Triple(4.7110, -74.0721, "Bogotá"),
-                Triple(19.4326, -99.1332, "Cidade do México"), Triple(40.7128, -74.0060, "Nova York"),
-                Triple(34.0522, -118.2437, "Los Angeles"), Triple(51.5074, -0.1278, "Londres"),
-                Triple(48.8566, 2.3522, "Paris"), Triple(52.5200, 13.4050, "Berlim"),
-                Triple(40.4168, -3.7038, "Madri"), Triple(41.9028, 12.4964, "Roma"),
-                Triple(55.7558, 37.6173, "Moscou"), Triple(41.0082, 28.9784, "Istambul"),
-                Triple(30.0444, 31.2357, "Cairo"), Triple(-26.2041, 28.0473, "Joanesburgo"),
+                Triple(-15.7939, -47.8828, "Brasília"), Triple(-34.6037, -58.3816, "Buenos Aires"),
+                Triple(-33.4489, -70.6693, "Santiago"), Triple(-12.0464, -77.0428, "Lima"),
+                Triple(4.7110, -74.0721, "Bogotá"), Triple(19.4326, -99.1332, "Cidade do México"),
+                Triple(40.7128, -74.0060, "Nova York"), Triple(34.0522, -118.2437, "Los Angeles"),
+                Triple(51.5074, -0.1278, "Londres"), Triple(48.8566, 2.3522, "Paris"),
+                Triple(52.5200, 13.4050, "Berlim"), Triple(40.4168, -3.7038, "Madri"),
+                Triple(41.9028, 12.4964, "Roma"), Triple(55.7558, 37.6173, "Moscou"),
+                Triple(41.0082, 28.9784, "Istambul"), Triple(30.0444, 31.2357, "Cairo"),
                 Triple(35.6895, 139.6917, "Tóquio"), Triple(39.9042, 116.4074, "Pequim"),
                 Triple(28.6139, 77.2090, "Nova Delhi"), Triple(13.7563, 100.5018, "Banguecoque"),
-                Triple(-33.8688, 151.2093, "Sydney"), Triple(-23.5505, -46.6333, "Brasil - SP"),
-                Triple(-15.7939, -47.8828, "Brasília"), Triple(-3.7319, -38.5267, "Fortaleza")
+                Triple(-33.8688, 151.2093, "Sydney"), Triple(-23.5505, -46.6333, "Brasil-SP"),
+                Triple(-3.7319, -38.5267, "Fortaleza"), Triple(-8.0476, -34.8770, "Recife")
             )
             val listaMundo = mutableListOf<AbrigoDemo>()
-            capitaisMundo.forEach { (la, lo, cidade) ->
+            capitais.forEach { (la, lo, cidade) ->
                 listaMundo.addAll(gerarAbrigosFallback(la, lo).map { it.copy(cidade = cidade, id = "mundo-${cidade}-${la}") })
             }
-            // Tenta buscar abrigos reais OSM também para a localização do usuário
-            locaisApoioReais = listaMundo.take(120)
-            // Se usuário tem GPS, adiciona abrigos reais perto dele também
-            origem?.let { gps -> 
-                scope.launch { 
-                    try { 
-                        val reais = OverpassRepository.buscarLocaisDeApoio(gps.latitude, gps.longitude, 20000)
-                        if (reais.isNotEmpty()) locaisApoioReais = (reais + locaisApoioReais).distinctBy { it.id }.take(130)
-                    } catch(_: Exception) {}
-                }
-            }
+            locaisApoioReais = listaMundo.take(150)
         }
     }
 
@@ -1074,17 +1062,16 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 return
             }
         }
-        // ORIGEM: usa GPS se disponível, senão usa centro da cidade selecionada (São Paulo por padrão)
-        val inicio = origem ?: GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng).takeIf { it.latitude != 0.0 } ?: GeoPoint(-23.5505, -46.6333)
+        val inicio = origem ?: GeoPoint(cidadeSelecionada.lat.takeIf { it != 0.0 } ?: -23.5505, cidadeSelecionada.lng.takeIf { it != 0.0 } ?: -46.6333)
         val destino = GeoPoint(destinoLat, destinoLng)
         selecionado = null
         abrigoSelecionado = null
         rotaInfo = null
         rotaPontos = emptyList()
-        avisoBusca = "Calculando rota ${modoRota.titulo} até abrigo..."
+        avisoBusca = "Calculando rota real por ruas…"
         scope.launch {
             try {
-                // Todos os meios de transporte devem funcionar
+                // Todos os meios de transporte devem funcionar - com fallback
                 val costingReal = when (modoRota) {
                     ModoRota.ONIBUS -> "bus"
                     else -> modoRota.valhallaCosting
@@ -1096,34 +1083,17 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                         costingReal
                     )
                 } catch (e: Exception) {
-                    try {
-                        // fallback auto
+                    // fallback: se bus/transit falhar, tenta auto
+                    if (costingReal == "bus" || costingReal == "transit") {
                         ValhallaRepository.buscarRotaCompleta(
                             inicio.longitude, inicio.latitude,
                             destino.longitude, destino.latitude,
                             "auto"
                         )
-                    } catch (e2: Exception) {
-                        // fallback OSRM
-                        try {
-                            OsrmRepository.buscarRotaCompleta(inicio.longitude, inicio.latitude, destino.longitude, destino.latitude)
-                        } catch (e3: Exception) {
-                            // último fallback: linha reta aproximada
-                            val dist = calcularDistancia(inicio.latitude, inicio.longitude, destino.latitude, destino.longitude)
-                            val metros = dist * 1000.0
-                            val velocidade = when (modoRota) {
-                                ModoRota.A_PE -> 5.0
-                                ModoRota.BICICLETA -> 15.0
-                                ModoRota.ONIBUS -> 30.0
-                                else -> 40.0
-                            }
-                            val segundos = (dist / velocidade * 3600.0)
-                            RotaCompleta(listOf(inicio, destino), metros, segundos)
-                        }
-                    }
+                    } else throw e
                 }
-                if (rota.pontos.isEmpty()) {
-                    throw IllegalStateException("Rota vazia")
+                if (rota.pontos.size < 2 || rota.distanciaMetros <= 0.0 || rota.duracaoSeg <= 0.0) {
+                    throw IllegalStateException("O serviço não retornou uma rota utilizável")
                 }
                 rotaPontos = rota.pontos
                 val km = rota.distanciaMetros / 1000.0
@@ -1132,21 +1102,32 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 val distancia = if (km < 1.0) "${rota.distanciaMetros.toInt()} m" else String.format(Locale("pt", "BR"), "%.1f km", km)
                 val chegada = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(Date(System.currentTimeMillis() + rota.duracaoSeg.toLong() * 1000L))
                 rotaInfo = RotaInfo(km, minutos, duracao, distancia, chegada)
-                avisoBusca = "Rota ${modoRota.titulo} para abrigo: $distancia • $duracao • Chegada $chegada"
+                avisoBusca = "Rota calculada pelo serviço de roteamento • tempo estimado, sujeito a condições locais"
                 mapView.controller.animateTo(GeoPoint(
                     (rotaPontos.minOf { it.latitude } + rotaPontos.maxOf { it.latitude }) / 2.0,
                     (rotaPontos.minOf { it.longitude } + rotaPontos.maxOf { it.longitude }) / 2.0
                 ))
                 mapView.controller.setZoom(when { km < 2 -> 15.0; km < 10 -> 13.0; km < 50 -> 10.0; else -> 7.0 })
                 mapView.invalidate()
-            } catch (e: Exception) {
-                // Mesmo com erro, desenha linha reta para não falhar
-                val dist = calcularDistancia(inicio.latitude, inicio.longitude, destino.latitude, destino.longitude)
-                rotaPontos = listOf(inicio, destino)
-                val minutos = (dist / 40.0 * 60.0).toInt().coerceAtLeast(1)
-                rotaInfo = RotaInfo(dist, minutos, "$minutos min", String.format(Locale("pt","BR"), "%.1f km", dist), SimpleDateFormat("HH:mm", Locale("pt","BR")).format(Date(System.currentTimeMillis() + minutos*60*1000L)))
-                avisoBusca = "Rota aproximada ${modoRota.titulo}: linha direta (serviço offline)"
-                mapView.invalidate()
+            } catch (_: Exception) {
+                // Fallback: desenha linha reta aproximada para garantir que rota sempre funcione
+                try {
+                    val dist = calcularDistancia(inicio.latitude, inicio.longitude, destino.latitude, destino.longitude)
+                    val velocidade = when(modoRota){ ModoRota.A_PE -> 5.0; ModoRota.BICICLETA -> 15.0; ModoRota.ONIBUS -> 30.0; else -> 40.0 }
+                    val minutos = (dist / velocidade * 60.0).toInt().coerceAtLeast(1)
+                    val duracao = if (minutos < 60) "$minutos min" else "${minutos/60}h ${minutos%60}min"
+                    val distancia = String.format(java.util.Locale("pt","BR"), "%.1f km", dist)
+                    val chegada = SimpleDateFormat("HH:mm", java.util.Locale("pt","BR")).format(Date(System.currentTimeMillis() + minutos*60*1000L))
+                    rotaPontos = listOf(inicio, destino)
+                    rotaInfo = RotaInfo(dist, minutos, duracao, distancia, chegada)
+                    avisoBusca = "Rota aproximada ${modoRota.titulo}: $distancia • $duracao • Chegada $chegada (offline)"
+                    mapView.invalidate()
+                } catch (e2: Exception) {
+                    avisoBusca = "Não foi possível calcular rota: ${e2.message}"
+                    rotaInfo = null
+                    rotaPontos = emptyList()
+                    mapView.invalidate()
+                }
             }
         }
     }
@@ -1169,7 +1150,12 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     }
 
 
-    // Removido segundo LaunchedEffect duplicado para evitar conflito de GPS
+    LaunchedEffect(Unit) {
+        // Localização GPS é opcional. Busca apenas dados reais quando há coordenadas.
+        if (cidadeSelecionada.nome == "Mundo") carregarAlertasReais(0.0, 0.0, todosGlobais = true)
+        else carregarAlertasReais(cidadeSelecionada.lat, cidadeSelecionada.lng)
+        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) }
+    }
     DisposableEffect(temPermissao) {
         if (!temPermissao) return@DisposableEffect onDispose { }
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -1728,41 +1714,29 @@ object OsrmRepository {
         scope.launch {
             try {
                 val lista = mutableListOf<AlertaRota>()
-                // Busca reverse geocoding para mostrar localização exata
                 try {
-                    val rev = NominatimRepository.buscarPorNome("${lat},${lon}")
-                    val primeiro = rev.firstOrNull()
-                    if (primeiro != null) {
-                        localNome = primeiro.display_name.take(80)
-                    }
-                } catch(_: Exception) {}
-                try {
-                    val resposta = GdacsRepository.buscarDesastres(tipos = "EQ;TC;FL;VO;DR;WF")
+                    val resposta = GdacsRepository.buscarDesastres()
                     resposta.features.forEach { f ->
                         val c = f.geometry.coordinates; if (c.size < 2) return@forEach
                         val lonE = c[0]; val latE = c[1]; if (!latE.isFinite() || !lonE.isFinite()) return@forEach
                         val dist = calcularDistancia(lat, lon, latE, lonE)
-                        // SEM LIMITE quando pesquisa específica como Argentina - mostra todos do mapa
-                        if (!semLimite && localNome.contains("Sua localização", ignoreCase = true) && dist > 2000.0) {
-                            // para localização atual, mostra até 2000km, senão mostra tudo
-                        }
+                        // Sem limite quando pesquisa específica (Argentina) - mostra tudo do mapa
+                        if (!semLimite && dist > 2000.0 && localNome.contains("Sua localização")) return@forEach
                         val nivel = when (f.properties.alertlevel.lowercase(java.util.Locale.ROOT)) { "red" -> "Crítica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Média" }
-                        val tipo = when (f.properties.eventtype.uppercase(java.util.Locale.ROOT)) { 
-                            "FL" -> "Enchente"; "WF" -> "Incêndio"; "TC" -> "Ciclone"; 
-                            "DR" -> "Seca"; "EQ" -> "Terremoto"; "VO" -> "Erupção vulcânica"; else -> "Tempestade" 
-                        }
+                        val tipo = when (f.properties.eventtype.uppercase(java.util.Locale.ROOT)) { "FL" -> "Enchente"; "WF" -> "Incêndio"; "TC" -> "Ciclone"; "DR" -> "Seca"; "EQ" -> "Terremoto"; "VO" -> "Erupção vulcânica"; else -> "Tempestade" }
                         val titulo = traduzirNomeEvento(f.properties.name, tipo)
                         val desc = f.properties.description?.replace(Regex("""<[^>]*>"""), " ")?.trim()?.take(400) ?: "Evento $tipo GDACS nível $nivel"
                         lista.add(AlertaRota(f.properties.eventid ?: "gdacs-${latE}-${lonE}", titulo, formatarDataAlerta(f.properties.pubDate), "$tipo - ${String.format(java.util.Locale.getDefault(), "%.0f km de %s", dist, localNome.take(20))} - GDACS", nivel, tipo, latE, lonE, dist, cidade = localNome, descricao = desc, fonte = "GDACS"))
                     }
-                } catch(e:Exception){ android.util.Log.e("SafePoint", "GDACS hist falhou ${e.message}") }
+                } catch(e:Exception){ android.util.Log.e("SafePoint","GDACS hist ${e.message}") }
                 try {
                     UsgsRepository.buscarUltimos30Dias().filter { it.magnitude >= 4.0 }.sortedByDescending { it.magnitude }.take(100).forEach { q ->
                         val dist = calcularDistancia(lat, lon, q.latitude, q.longitude)
+                        if (!semLimite && dist > 2000.0 && localNome.contains("Sua localização")) return@forEach
                         val nivel = when { q.magnitude >= 6.5 -> "Crítica"; q.magnitude >= 5.0 -> "Alta"; q.magnitude >= 3.5 -> "Média"; else -> "Baixa" }
                         lista.add(AlertaRota("usgs-${q.timestamp}", traduzirNomeEvento(q.nome, "Terremoto"), java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt","BR")).format(java.util.Date(q.timestamp)), "Terremoto M${String.format(java.util.Locale.US,"%.1f", q.magnitude)} - ${String.format(java.util.Locale.getDefault(), "%.0f km", dist)} - USGS", nivel, "Terremoto", q.latitude, q.longitude, dist, cidade = localNome, descricao = traduzirLocalInglesParaPortugues("${q.nome} - Magnitude ${q.magnitude} - USGS"), fonte = "USGS"))
                     }
-                } catch(e:Exception){ android.util.Log.e("SafePoint", "USGS hist falhou ${e.message}") }
+                } catch(e:Exception){ android.util.Log.e("SafePoint","USGS hist ${e.message}") }
                 try {
                     val eonet = EonetRepository.buscarEventos()
                     eonet.events.forEach { ev ->
@@ -1770,6 +1744,7 @@ object OsrmRepository {
                         val coords = geom.coordinates; if (coords.size < 2) return@forEach
                         val la = coords[1]; val lo = coords[0]
                         val dist = calcularDistancia(lat, lon, la, lo)
+                        if (!semLimite && dist > 2000.0 && localNome.contains("Sua localização")) return@forEach
                         val cat = ev.categories.firstOrNull()?.id ?: ""
                         val tipo = when {
                             cat.contains("wildfire", true) -> "Incêndio"
@@ -1779,22 +1754,22 @@ object OsrmRepository {
                             cat.contains("volcano", true) -> "Erupção vulcânica"
                             cat.contains("earthquake", true) -> "Terremoto"
                             cat.contains("storm", true) -> "Tempestade"
-                            cat.contains("cyclone", true) || cat.contains("hurricane", true) || cat.contains("typhoon", true) -> "Ciclone"
+                            cat.contains("cyclone", true) || cat.contains("hurricane", true) -> "Ciclone"
                             else -> "Tempestade"
                         }
                         lista.add(AlertaRota("eonet-${ev.id}", traduzirNomeEvento(ev.title, tipo), geom.date ?: "", "$tipo - ${String.format(java.util.Locale.getDefault(), "%.0f km", dist)} - EONET", "Média", tipo, la, lo, dist, cidade = localNome, descricao = traduzirLocalInglesParaPortugues(ev.title), fonte = "EONET"))
                     }
-                } catch(e:Exception){ android.util.Log.e("SafePoint", "EONET hist falhou ${e.message}") }
-                // SEM LIMITE: ordena por distância mas mostra todos, igual ao mapa
+                } catch(e:Exception){ android.util.Log.e("SafePoint","EONET hist ${e.message}") }
                 alertasHistorico = lista.sortedBy { it.distancia }.take(150)
-                if (lista.isEmpty()) erroFonte = "Nenhum alerta encontrado nas fontes. Tente buscar 'Mundo' ou 'Brasil'."
+                if (lista.isEmpty()) erroFonte = "Nenhum alerta encontrado. Tente buscar Mundo, Brasil ou Argentina - mostra todos do mapa sem limite."
                 else erroFonte = null
                 ultimaAtualizacao = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt","BR")).format(java.util.Date())
             } catch (e: Exception) { erroFonte = "Falha: ${e.message}" }
             finally { carregando = false }
         }
     }
-    fun pesquisarLocal() {
+
+        fun pesquisarLocal() {
         val termo = buscaLocal.trim()
         if (termo.isBlank()) return
         scope.launch {
@@ -1802,12 +1777,11 @@ object OsrmRepository {
             try {
                 val resultados = NominatimRepository.buscarPorNome(termo)
                 val primeiro = resultados.firstOrNull()
-                if (primeiro == null) { erroFonte = "Não encontrei '$termo'. Tente informar cidade, país como Argentina, Japão, Brasil."; carregando = false; return@launch }
+                if (primeiro == null) { erroFonte = "Não encontrei '$termo'. Tente Argentina, Brasil, Mundo, Japão - mostra todos sem limite."; carregando = false; return@launch }
                 val lat = primeiro.lat.toDoubleOrNull(); val lon = primeiro.lon.toDoubleOrNull()
                 if (lat == null || lon == null) { erroFonte = "A localização encontrada não possui coordenadas válidas."; carregando = false; return@launch }
                 locaisEncontrados = resultados; localNome = primeiro.display_name.take(80); latitudeBase = lat; longitudeBase = lon; mostrarSugestoes = false
                 carregando = false
-                // SEM LIMITE: ao pesquisar Argentina, mostra todos os alertas do mapa, não só 300km
                 carregarPorCoordenadas(lat, lon, semLimite = true)
             } catch (_: Exception) { erroFonte = "Falha ao pesquisar o local. Tente novamente."; carregando = false }
         }
@@ -1820,7 +1794,7 @@ object OsrmRepository {
                 carregarPorCoordenadas(lat, lon, semLimite = false)
             }
         } else {
-            // Sem permissão, carrega mundo com todos alertas
+            // Sem permissão, carrega mundo com todos alertas sem limite
             carregarPorCoordenadas(0.0, 0.0, semLimite = true)
         }
     }
@@ -1845,13 +1819,13 @@ object OsrmRepository {
                 OutlinedTextField(value = buscaLocal, onValueChange = { buscaLocal = it }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text("Buscar cidade, bairro ou endereço", fontSize = 11.sp) }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(12.dp))
                 Spacer(Modifier.width(7.dp)); Button(onClick = { pesquisarLocal() }, enabled = !carregando, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F)), shape = RoundedCornerShape(12.dp)) { Text("Buscar") }
             }
-            // Área exata com GPS automático - sem botão Usar GPS
+            // GPS automático, sem botão Usar GPS - mostra localização exata
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Place, null, tint = Color(0xFF16845F), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Área: $localNome", color = Color(0xFF0B2545), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2)
                     if (latitudeBase != null && longitudeBase != null) {
-                        Text(String.format(Locale.US, "%.5f, %.5f • GPS ativo", latitudeBase!!, longitudeBase!!), color = Color(0xFF64748B), fontSize = 9.sp)
+                        Text(String.format(java.util.Locale.US, "%.5f, %.5f • GPS ativo • sem necessidade de ativar novamente", latitudeBase!!, longitudeBase!!), color = Color(0xFF64748B), fontSize = 9.sp)
                     }
                 }
                 if (carregando) { CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp) }
