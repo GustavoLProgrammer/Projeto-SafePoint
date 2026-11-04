@@ -39,7 +39,6 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.util.GeoPoint
@@ -70,11 +69,19 @@ fun calcularDistancia(lat1: Double, lon1: Double, lat2: Double, lon2: Double): D
 
 fun obterLocalizacao(context: Context, cb:(Double,Double)->Unit){
     try{
-        val fused=LocationServices.getFusedLocationProviderClient(context)
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
         if(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED){
-            fused.lastLocation.addOnSuccessListener{ loc-> if(loc!=null) cb(loc.latitude, loc.longitude) }
+            val providers = lm.getProviders(true)
+            for(provider in providers){
+                val loc = lm.getLastKnownLocation(provider)
+                if(loc!=null){ cb(loc.latitude, loc.longitude); return }
+            }
         }
-    }catch(_:Exception){}
+        // Fallback São Paulo se não conseguir
+        cb(-23.5505, -46.6333)
+    }catch(_:Exception){
+        cb(-23.5505, -46.6333)
+    }
 }
 
 // ================= INVENTADO - MILHARES DE ABRIGOS E TODOS TIPOS =================
