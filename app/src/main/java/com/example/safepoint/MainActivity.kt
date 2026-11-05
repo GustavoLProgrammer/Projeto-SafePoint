@@ -791,8 +791,6 @@ class OfflineBrasilOverlay(private val cidades: List<CidadeDemo>) : Overlay() {
 }
 
 // Mapa e histórico usam catálogo local e não consultam serviços cartográficos externos.
-@Composable
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
