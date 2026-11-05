@@ -10,6 +10,7 @@ import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint
 import android.graphics.Path as AndroidPath
 import android.graphics.Point
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.BitmapDrawable
 import android.location.LocationManager
 import android.net.Uri
@@ -791,8 +792,6 @@ class OfflineBrasilOverlay(private val cidades: List<CidadeDemo>) : Overlay() {
 }
 
 // Mapa e histórico usam catálogo local e não consultam serviços cartográficos externos.
-@Composable
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
@@ -1301,8 +1300,6 @@ object OsrmRepository {
 // Histórico por localidade com detalhes e filtros.
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaHistoricoReal(navController: NavController) {
     val context = LocalContext.current
@@ -1389,7 +1386,7 @@ fun TelaHistoricoReal(navController: NavController) {
                     }
                     Text("Histórico do que ocorreu quando você passou:", fontWeight=FontWeight.Bold, fontSize=12.sp, modifier=Modifier.padding(top=10.dp))
                     Text(det.descricao, fontSize=11.sp, color=Color(0xFF333333), lineHeight=14.sp, modifier=Modifier.padding(top=4.dp))
-                    Text("Local: ${det.cidade} • ${String.format("%.4f, %.4f", det.lat, det.lng)}", fontSize=10.sp, color=Color.Gray, modifier=Modifier.padding(top=8.dp))
+                    Text("Local: ${det.cidade} • ${String.format("%.4f, %.4f", det.latitude, det.longitude)}", fontSize=10.sp, color=Color.Gray, modifier=Modifier.padding(top=8.dp))
                     Text("Registro: ${det.dataHora}", fontSize=10.sp, color=Color.Gray)
                     Button(onClick={ alertaDetalhe=null }, modifier=Modifier.fillMaxWidth().padding(top=10.dp)){ Text("Fechar") }
                 }
