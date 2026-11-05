@@ -395,7 +395,7 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
         val concedida = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true || perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         PrefsHelper.setPermissaoSolicitada(context)
         PrefsHelper.setLocalizacaoAceita(context, true)
-        if (concedida) onAceitar() else { Toast.makeText(context, "Localização não concedida, mas você pode usar o mapa", Toast.LENGTH_LONG).show(); onAceitar() }
+        onAceitar()
     }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(modifier = Modifier.height(24.dp)); Text("Permitir localização?", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Precisamos da sua localização para mostrar o mapa real, rotas seguras e abrigos próximos. Esta permissão será solicitada apenas uma vez em todo o aplicativo.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center); Spacer(modifier = Modifier.height(32.dp)); Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable {
@@ -404,7 +404,7 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
                 launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
             } else { onAceitar() }
         }) { Text("Permitir Localização", color = Color.White, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(12.dp)); TextButton(onClick = onRecusar) { Text("Agora não", color = cinzaTexto) }
-        Spacer(modifier = Modifier.height(16.dp)); Text("Você só verá este pedido uma vez. Depois poderá ativar nas configurações.", fontSize = 10.sp, color = cinzaTexto, textAlign = TextAlign.Center)
+        Spacer(modifier = Modifier.height(12.dp)); Text("Você só verá este pedido uma vez.", fontSize = 10.sp, color = cinzaTexto, textAlign = TextAlign.Center)
     }
 }
 
@@ -740,97 +740,6 @@ object SafePointDemoData {
     }.sortedBy { calcularDistancia(lat, lng, it.lat, it.lng) }
 }
 
-
-// HISTÓRICO DE LOCAIS VISITADOS - ILIMITADO, TODOS OS TIPOS
-object HistoricoUsuarioStore {
-    data class EventoVisitado(
-        val id: String = java.util.UUID.randomUUID().toString(),
-        val localNome: String,
-        val tipo: String,
-        val gravidade: String,
-        val descricao: String,
-        val dataHora: String = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(java.util.Date()),
-        val lat: Double,
-        val lng: Double,
-        val distanciaKm: Double = 0.0,
-        val foiVisitado: Boolean = true
-    )
-    val eventos = androidx.compose.runtime.mutableStateListOf<EventoVisitado>()
-    fun adicionar(localNome: String, tipo: String, gravidade: String, descricao: String, lat: Double, lng: Double, distanciaKm: Double = 0.0) {
-        val ev = EventoVisitado(localNome = localNome, tipo = tipo, gravidade = gravidade, descricao = descricao, lat = lat, lng = lng, distanciaKm = distanciaKm)
-        eventos.add(0, ev)
-    }
-    fun limpar() { eventos.clear() }
-}
-
-// DADOS PROFISSIONAIS - DISTRIBUIÇÃO UNIFORME MUNDIAL SEM AGLOMERAÇÃO - FICTÍCIOS
-object SafePointMundoProfissional {
-    val tiposAlertaTodos = listOf(
-        "Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone",
-        "Terremoto", "Alagamento", "Vendaval", "Granizo", "Desabamento", "Inundação",
-        "Queimada", "Tsunami", "Erupção vulcânica", "Onda de calor", "Nevasca", "Tornado"
-    )
-    val tiposAbrigoTodos = listOf("Abrigo", "Hospital", "Bombeiros", "Polícia", "Farmácia", "Escola", "Centro Comunitário", "Igreja")
-    val gravidades = listOf("Baixa", "Média", "Alta", "Crítica")
-
-    fun normalizar(valor: String): String = java.text.Normalizer.normalize(valor.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[,;]+"), " ").replace(Regex("\\s+"), " ").trim()
-
-    // GERAÇÃO UNIFORME - 4 alertas por cidade em ângulos 90° separados, 3 abrigos intercalados 45° - sem ficar perto
-    val alertasFicticiosMundo: List<AlertaDemo> by lazy {
-        val lista = mutableListOf<AlertaDemo>()
-        SafePointDemoData.cidades.filter { it.nome != "Brasil" }.forEachIndexed { idxCidade, cidade ->
-            val rng = kotlin.random.Random(cidade.nome.hashCode() + 1001)
-            val tiposEscolhidos = tiposAlertaTodos.shuffled(rng).take(4)
-            tiposEscolhidos.forEachIndexed { idx, tipo ->
-                val anguloBase = (idx * 90.0 + rng.nextDouble(-12.0, 12.0)) * Math.PI / 180.0
-                val raio = when (idx) { 0 -> 0.025; 1 -> 0.038; 2 -> 0.052; else -> 0.065 } + rng.nextDouble(-0.003, 0.003)
-                val dLat = kotlin.math.cos(anguloBase) * raio
-                val dLng = kotlin.math.sin(anguloBase) * raio / kotlin.math.cos(Math.toRadians(cidade.lat)).coerceAtLeast(0.2)
-                val gravidade = gravidades[(idxCidade + idx) % gravidades.size]
-                val descricao = when (tipo) {
-                    "Enchente" -> "Área com risco de enchente em ${cidade.nome}. Volume de chuva acima do esperado."
-                    "Incêndio" -> "Foco de incêndio detectado próximo a ${cidade.nome}. Mantenha distância."
-                    "Tempestade" -> "Tempestade severa prevista para ${cidade.nome}. Procure abrigo seguro."
-                    "Deslizamento" -> "Risco de deslizamento em encostas de ${cidade.nome}."
-                    "Seca" -> "Condição de seca prolongada em ${cidade.nome}."
-                    "Ciclone" -> "Alerta de ciclone próximo a ${cidade.nome}."
-                    "Terremoto" -> "Atividade sísmica leve registrada perto de ${cidade.nome}."
-                    "Alagamento" -> "Ponto de alagamento em ${cidade.nome}. Via interditada."
-                    "Vendaval" -> "Vendaval com ventos de até 80km/h em ${cidade.nome}."
-                    "Granizo" -> "Queda de granizo prevista em ${cidade.nome}."
-                    "Desabamento" -> "Risco de desabamento em ${cidade.nome}."
-                    "Inundação" -> "Inundação em curso em ${cidade.nome}."
-                    "Queimada" -> "Queimada em vegetação próxima a ${cidade.nome}."
-                    "Tsunami" -> "Alerta preventivo de tsunami para região de ${cidade.nome}."
-                    "Erupção vulcânica" -> "Atividade vulcânica monitorada perto de ${cidade.nome}."
-                    "Onda de calor" -> "Onda de calor intensa em ${cidade.nome}."
-                    "Nevasca" -> "Nevasca forte em ${cidade.nome}."
-                    else -> "Ocorrência de $tipo em ${cidade.nome}."
-                }
-                lista.add(AlertaDemo(id = "alerta-${cidade.nome}-$tipo-$idx", cidade = cidade.nome, tipo = tipo, gravidade = gravidade, lat = (cidade.lat + dLat).coerceIn(-85.0, 85.0), lng = (cidade.lng + dLng).coerceIn(-180.0, 180.0), descricao = descricao, dataHora = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt","BR")).format(java.util.Date(System.currentTimeMillis() - rng.nextLong(0, 7*24*60*60*1000L))), bairro = "Região de ${cidade.nome}"))
-            }
-        }
-        lista
-    }
-
-    val abrigosFicticiosMundo: List<AbrigoDemo> by lazy {
-        val lista = mutableListOf<AbrigoDemo>()
-        SafePointDemoData.cidades.filter { it.nome != "Brasil" }.forEach { cidade ->
-            val rng = kotlin.random.Random(cidade.nome.hashCode() + 2002)
-            val tiposEscolhidos = tiposAbrigoTodos.shuffled(rng).take(3)
-            tiposEscolhidos.forEachIndexed { idx, tipoAbrigo ->
-                val anguloBase = (45.0 + idx * 120.0 + rng.nextDouble(-8.0, 8.0)) * Math.PI / 180.0
-                val raio = 0.08 + idx * 0.015 + rng.nextDouble(0.0, 0.008)
-                val dLat = kotlin.math.cos(anguloBase) * raio
-                val dLng = kotlin.math.sin(anguloBase) * raio / kotlin.math.cos(Math.toRadians(cidade.lat)).coerceAtLeast(0.2)
-                lista.add(AbrigoDemo(id = "abrigo-${cidade.nome}-$tipoAbrigo-$idx", cidade = cidade.nome, nome = "$tipoAbrigo • ${cidade.nome}", lat = (cidade.lat + dLat).coerceIn(-85.0, 85.0), lng = (cidade.lng + dLng).coerceIn(-180.0, 180.0), tipoAbrigo = tipoAbrigo))
-            }
-        }
-        lista
-    }
-}
-
-
 /** Mapa-múndi vetorial offline, desenhado no aparelho sem tiles ou provedores externos. */
 class OfflineBrasilOverlay(private val cidades: List<CidadeDemo>) : Overlay() {
     private val terra = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(28, 67, 68); style = Paint.Style.FILL }
@@ -896,43 +805,162 @@ class OfflineBrasilOverlay(private val cidades: List<CidadeDemo>) : Overlay() {
 
 // Mapa e histórico usam catálogo local e não consultam serviços cartográficos externos.
 
+// HISTÓRICO DE LOCAIS VISITADOS - ILIMITADO
+object HistoricoUsuarioStore {
+    data class EventoVisitado(
+        val id: String = java.util.UUID.randomUUID().toString(),
+        val localNome: String,
+        val tipo: String,
+        val gravidade: String,
+        val descricao: String,
+        val dataHora: String = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(java.util.Date()),
+        val lat: Double,
+        val lng: Double,
+        val distanciaKm: Double = 0.0,
+        val foiVisitado: Boolean = true
+    )
+    val eventos = androidx.compose.runtime.mutableStateListOf<EventoVisitado>()
+    fun adicionar(localNome: String, tipo: String, gravidade: String, descricao: String, lat: Double, lng: Double, distanciaKm: Double = 0.0) {
+        eventos.add(0, EventoVisitado(localNome = localNome, tipo = tipo, gravidade = gravidade, descricao = descricao, lat = lat, lng = lng, distanciaKm = distanciaKm))
+    }
+    fun limpar() { eventos.clear() }
+}
+
+object SafePointMundoProfissional {
+    val tiposAlertaTodos = listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Alagamento", "Vendaval", "Granizo", "Desabamento", "Inundação", "Queimada", "Tsunami", "Erupção vulcânica", "Onda de calor", "Nevasca", "Tornado")
+    val tiposAbrigoTodos = listOf("Abrigo", "Hospital", "Bombeiros", "Polícia", "Farmácia", "Escola", "Centro Comunitário", "Igreja")
+    val gravidades = listOf("Baixa", "Média", "Alta", "Crítica")
+    fun normalizar(valor: String): String = java.text.Normalizer.normalize(valor.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[,;]+"), " ").replace(Regex("\\s+"), " ").trim()
+    val alertasFicticiosMundo: List<AlertaDemo> by lazy {
+        val lista = mutableListOf<AlertaDemo>()
+        SafePointDemoData.cidades.filter { it.nome != "Brasil" }.forEachIndexed { idxCidade, cidade ->
+            val rng = kotlin.random.Random(cidade.nome.hashCode() + 1001)
+            val tipos = tiposAlertaTodos.shuffled(rng).take(4)
+            tipos.forEachIndexed { idx, tipo ->
+                val ang = (idx * 90.0 + rng.nextDouble(-12.0, 12.0)) * Math.PI / 180.0
+                val raio = when (idx) { 0 -> 0.025; 1 -> 0.038; 2 -> 0.052; else -> 0.065 } + rng.nextDouble(-0.003, 0.003)
+                val dLat = kotlin.math.cos(ang) * raio
+                val dLng = kotlin.math.sin(ang) * raio / kotlin.math.cos(Math.toRadians(cidade.lat)).coerceAtLeast(0.2)
+                val grav = gravidades[(idxCidade + idx) % gravidades.size]
+                val desc = "$tipo em ${cidade.nome}. Área monitorada. Siga orientações da Defesa Civil."
+                lista.add(AlertaDemo(id = "alerta-${cidade.nome}-$tipo-$idx", cidade = cidade.nome, tipo = tipo, gravidade = grav, lat = (cidade.lat + dLat).coerceIn(-85.0, 85.0), lng = (cidade.lng + dLng).coerceIn(-180.0, 180.0), descricao = desc, dataHora = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt","BR")).format(java.util.Date(System.currentTimeMillis() - rng.nextLong(0, 7*24*60*60*1000L))), bairro = "Região de ${cidade.nome}"))
+            }
+        }
+        lista
+    }
+    val abrigosFicticiosMundo: List<AbrigoDemo> by lazy {
+        val lista = mutableListOf<AbrigoDemo>()
+        SafePointDemoData.cidades.filter { it.nome != "Brasil" }.forEach { cidade ->
+            val rng = kotlin.random.Random(cidade.nome.hashCode() + 2002)
+            val tipos = tiposAbrigoTodos.shuffled(rng).take(3)
+            tipos.forEachIndexed { idx, tipoAbrigo ->
+                val ang = (45.0 + idx * 120.0 + rng.nextDouble(-8.0, 8.0)) * Math.PI / 180.0
+                val raio = 0.08 + idx * 0.015 + rng.nextDouble(0.0, 0.008)
+                val dLat = kotlin.math.cos(ang) * raio
+                val dLng = kotlin.math.sin(ang) * raio / kotlin.math.cos(Math.toRadians(cidade.lat)).coerceAtLeast(0.2)
+                lista.add(AbrigoDemo(id = "abrigo-${cidade.nome}-$tipoAbrigo-$idx", cidade = cidade.nome, nome = "$tipoAbrigo • ${cidade.nome}", lat = (cidade.lat + dLat).coerceIn(-85.0, 85.0), lng = (cidade.lng + dLng).coerceIn(-180.0, 180.0), tipoAbrigo = tipoAbrigo))
+            }
+        }
+        lista
+    }
+}
+
+fun criarPinoAlertaProfissionalMenor(context: Context, gravidade: String, tipo: String, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val w = tamanhoPx.coerceAtLeast(24); val h = (w * 1.25f).toInt(); val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val canvas = AndroidCanvas(bmp)
+    val corFundo = when (gravidade) { "Crítica" -> android.graphics.Color.rgb(211,47,47); "Alta" -> android.graphics.Color.rgb(245,124,0); "Média" -> android.graphics.Color.rgb(255,193,7); else -> android.graphics.Color.rgb(67,160,71) }
+    val paint = Paint().apply { color = corFundo; isAntiAlias = true; style = Paint.Style.FILL }
+    val paintBorda = Paint().apply { color = android.graphics.Color.WHITE; isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = w*0.08f }
+    val path = AndroidPath().apply { moveTo(w/2f, h*0.05f); cubicTo(w*0.90f, h*0.05f, w.toFloat(), h*0.25f, w*0.95f, h*0.40f); cubicTo(w*0.90f, h*0.55f, w*0.70f, h*0.80f, w/2f, h*0.98f); cubicTo(w*0.30f, h*0.80f, w*0.10f, h*0.55f, w*0.05f, h*0.40f); cubicTo(0f, h*0.25f, w*0.10f, h*0.05f, w/2f, h*0.05f); close() }
+    canvas.drawPath(path, paint); canvas.drawPath(path, paintBorda)
+    val letra = when(tipo){ "Enchente"->"E"; "Incêndio"->"I"; "Tempestade"->"T"; "Deslizamento"->"D"; "Seca"->"S"; "Ciclone"->"C"; "Terremoto"->"T"; "Alagamento"->"A"; "Vendaval"->"V"; "Granizo"->"G"; "Desabamento"->"D"; "Inundação"->"I"; "Queimada"->"Q"; else->"!" }
+    val texto = Paint().apply { color = android.graphics.Color.WHITE; textSize = w*0.52f; textAlign = Paint.Align.CENTER; isFakeBoldText = true; isAntiAlias = true }
+    canvas.drawText(letra, w/2f, h*0.52f, texto)
+    return BitmapDrawable(context.resources, bmp)
+}
+
+fun criarPinoAbrigoProfissionalMenor(context: Context, tipoAbrigo: String, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val w = tamanhoPx.coerceAtLeast(24); val bmp = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888); val canvas = AndroidCanvas(bmp); val cx = w/2f; val cy = w/2f; val raio = w/2f - 2f
+    val cor = when(tipoAbrigo){ "Hospital"->android.graphics.Color.rgb(198,40,40); "Bombeiros"->android.graphics.Color.rgb(239,108,0); "Polícia"->android.graphics.Color.rgb(21,101,192); "Farmácia"->android.graphics.Color.rgb(123,31,162); "Escola"->android.graphics.Color.rgb(46,125,50); else->android.graphics.Color.rgb(46,125,50) }
+    val circ = Paint().apply { color = cor; isAntiAlias = true }; canvas.drawCircle(cx, cy, raio, circ)
+    val borda = Paint().apply { color = android.graphics.Color.WHITE; style = Paint.Style.STROKE; strokeWidth = w*0.09f; isAntiAlias = true }; canvas.drawCircle(cx, cy, raio - w*0.04f, borda)
+    val texto = Paint().apply { color = android.graphics.Color.WHITE; textSize = w*0.50f; textAlign = Paint.Align.CENTER; isFakeBoldText = true; isAntiAlias = true }
+    val letra = when(tipoAbrigo){ "Hospital"->"H"; "Bombeiros"->"B"; "Polícia"->"P"; "Farmácia"->"F"; "Escola"->"E"; else->"A" }
+    canvas.drawText(letra, cx, cy - (texto.descent()+texto.ascent())/2f, texto)
+    return BitmapDrawable(context.resources, bmp)
+}
+
+fun criarIconeLocalizacao(tamanhoPx: Int): android.graphics.Bitmap { val size = tamanhoPx.coerceAtLeast(28); val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888); val c = AndroidCanvas(bmp); val cx=size/2f; val cy=size/2f; val pFundo=Paint().apply{color=android.graphics.Color.WHITE; isAntiAlias=true}; c.drawCircle(cx,cy,size*0.46f,pFundo); val pAzul=Paint().apply{color=android.graphics.Color.rgb(33,150,243); isAntiAlias=true}; c.drawCircle(cx,cy,size*0.38f,pAzul); val pSeta=Paint().apply{color=android.graphics.Color.WHITE; isAntiAlias=true}; val path=AndroidPath().apply{moveTo(cx,cy-size*0.28f); lineTo(cx-size*0.18f,cy+size*0.18f); lineTo(cx-size*0.05f,cy+size*0.10f); lineTo(cx+size*0.05f,cy+size*0.10f); lineTo(cx+size*0.18f,cy+size*0.18f); close()}; c.drawPath(path,pSeta); return bmp }
+
+
+fun criarPinoDesastreNivel(context: Context, nivelAlerta: String, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val grav = when(nivelAlerta){ "Red"->"Crítica"; "Orange"->"Alta"; "Yellow"->"Média"; else->"Baixa" }
+    return criarPinoAlertaProfissionalMenor(context, grav, "!", tamanhoPx.coerceAtMost(32))
+}
+fun criarPinoDesastre(context: Context, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    return criarPinoAlertaProfissionalMenor(context, "Crítica", "!", tamanhoPx.coerceAtMost(32))
+}
+fun criarPinoSeguranca(context: Context, categoria: String?, corFundo: Color, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val tipo = when(categoria){ "hospital"->"Hospital"; "fire_station"->"Bombeiros"; "police"->"Polícia"; "shelter"->"Abrigo"; "pharmacy"->"Farmácia"; else->"Abrigo" }
+    return criarPinoAbrigoProfissionalMenor(context, tipo, tamanhoPx.coerceAtMost(30))
+}
+
+
+fun criarPinoSetaAzul(context: Context, tamanhoPx: Int): android.graphics.drawable.Drawable {
+    val w = tamanhoPx.coerceAtLeast(28); val h = tamanhoPx; val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); val canvas = AndroidCanvas(bmp)
+    val cx = w/2f; val cy = h/2f
+    val fundo = Paint().apply { color = android.graphics.Color.WHITE; isAntiAlias = true }; canvas.drawCircle(cx, cy, w*0.46f, fundo)
+    val azul = Paint().apply { color = android.graphics.Color.rgb(33,150,243); isAntiAlias = true }; canvas.drawCircle(cx, cy, w*0.38f, azul)
+    val seta = Paint().apply { color = android.graphics.Color.WHITE; isAntiAlias = true; style = Paint.Style.FILL }
+    val pathSeta = AndroidPath().apply { moveTo(cx, cy - h*0.28f); lineTo(cx - w*0.18f, cy + h*0.18f); lineTo(cx - w*0.05f, cy + h*0.10f); lineTo(cx + w*0.05f, cy + h*0.10f); lineTo(cx + w*0.18f, cy + h*0.18f); close() }
+    canvas.drawPath(pathSeta, seta)
+    return BitmapDrawable(context.resources, bmp)
+}
+
+
 @Composable
 fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     val context = LocalContext.current
     var busca by remember { mutableStateOf("") }
     var cidadeSelecionada by remember { mutableStateOf(CidadeDemo("Mundo", "", 0.0, 0.0)) }
     var filtroGravidade by remember { mutableStateOf(setOf("Crítica", "Alta", "Média", "Baixa")) }
-    var filtroTipo by remember { mutableStateOf(SafePointMundoProfissional.tiposAlertaTodos.toSet()) }
+    var filtroTipo by remember { mutableStateOf(setOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Erupção vulcânica")) }
     var mostrarAbrigos by remember { mutableStateOf(true) }
     var selecionado by remember { mutableStateOf<AlertaDemo?>(null) }
     var abrigoSelecionado by remember { mutableStateOf<AbrigoDemo?>(null) }
     var rotaPontos by remember { mutableStateOf<List<GeoPoint>>(emptyList()) }
     var rotaInfo by remember { mutableStateOf<RotaInfo?>(null) }
     var modoRota by remember { mutableStateOf(ModoRota.CARRO) }
-    var origem by remember { mutableStateOf(GeoPoint(-23.5505, -46.6333)) }
+    var origem by remember { mutableStateOf(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)) }
     var gpsAtivo by remember { mutableStateOf(false) }
-    var avisoBusca by remember { mutableStateOf("Mapa mundial • ${SafePointMundoProfissional.alertasFicticiosMundo.size} alertas e ${SafePointMundoProfissional.abrigosFicticiosMundo.size} abrigos distribuídos uniformemente sem aglomeração") }
-    var mapaSatelite by remember { mutableStateOf(false) }
+    var avisoBusca by remember { mutableStateOf("") }
+    var alertasDoLocal by remember { mutableStateOf<List<AlertaDemo>>(emptyList()) }
+    var locaisApoioReais by remember { mutableStateOf<List<AbrigoDemo>>(emptyList()) }
+    var carregandoLocais by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-
-    // NÃO pede permissão aqui - permissão é pedida apenas uma vez em TelaPermissaoLocalizacao
-    val temPermissao = remember { ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED }
-
-    val tileSourceRua = remember {
-        XYTileSource("OpenStreetMap", 0, 19, 256, ".png", arrayOf("https://a.tile.openstreetmap.org/", "https://b.tile.openstreetmap.org/", "https://c.tile.openstreetmap.org/"), "© OpenStreetMap")
+    var temPermissao by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
+        temPermissao = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true || perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true }
+        else Toast.makeText(context, "Localização não autorizada. Você ainda pode pesquisar qualquer local no mapa.", Toast.LENGTH_LONG).show()
     }
+    Configuration.getInstance().userAgentValue = "SafePoint/1.4 (Android; ${context.packageName}; contato: suporte@safepoint.app)"
+    var mapaSatelite by remember { mutableStateOf(false) }
+    val tileSourceRua = remember {
+        XYTileSource("OpenStreetMap", 0, 19, 256, ".png", arrayOf("https://a.tile.openstreetmap.org/", "https://b.tile.openstreetmap.org/", "https://c.tile.openstreetmap.org/"), "© OpenStreetMap contributors")
+    }
+    // Camada pública NASA GIBS. Não é imagem ao vivo nem de alta resolução urbana.
     val tileSourceSatelite = remember {
-        object : XYTileSource("Esri Satélite", 0, 19, 256, "", arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/"), "© Esri") {
+        object : XYTileSource("NASA GIBS True Color", 0, 9, 256, ".jpg", arrayOf("https://gibs.earthdata.nasa.gov/"), "NASA GIBS / NASA Earthdata") {
             override fun getTileURLString(pMapTile: Long): String {
                 val z = org.osmdroid.util.MapTileIndex.getZoom(pMapTile)
                 val x = org.osmdroid.util.MapTileIndex.getX(pMapTile)
                 val y = org.osmdroid.util.MapTileIndex.getY(pMapTile)
-                return "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$z/$y/$x"
+                val data = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(System.currentTimeMillis() - 2L * 24L * 60L * 60L * 1000L))
+                return "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/$data/GoogleMapsCompatible_Level9/$z/$y/$x.jpg"
             }
         }
     }
     val tileSource = if (mapaSatelite) tileSourceSatelite else tileSourceRua
-
     val mapView = remember {
         MapView(context.applicationContext).apply {
             setTileSource(tileSource)
@@ -940,38 +968,97 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             setMultiTouchControls(true)
             isTilesScaledToDpi = true
             setBackgroundColor(android.graphics.Color.rgb(238, 243, 246))
-            controller.setZoom(3.0)
-            controller.setCenter(GeoPoint(0.0, -30.0))
+            controller.setZoom(5.0)
+            controller.setCenter(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng))
         }
     }
     LaunchedEffect(mapaSatelite) { mapView.setTileSource(tileSource); mapView.invalidate() }
-
-    val alertasVisiveis = remember(filtroGravidade, filtroTipo) {
-        SafePointMundoProfissional.alertasFicticiosMundo.filter { it.gravidade in filtroGravidade && it.tipo in filtroTipo }
+    val alertasVisiveis = remember(filtroGravidade, filtroTipo, alertasDoLocal) {
+        alertasDoLocal.filter { it.gravidade in filtroGravidade && it.tipo in filtroTipo }
     }
-    val abrigosVisiveis = remember(mostrarAbrigos) {
-        if (!mostrarAbrigos) emptyList() else SafePointMundoProfissional.abrigosFicticiosMundo
-    }
+    val abrigosVisiveis = remember(mostrarAbrigos, locaisApoioReais) { if (mostrarAbrigos) locaisApoioReais else emptyList() }
 
-    fun aplicarLocalExato(lat: Double, lng: Double, nome: String) {
-        cidadeSelecionada = CidadeDemo(nome, "", lat, lng)
-        selecionado = null; abrigoSelecionado = null; rotaPontos = emptyList(); rotaInfo = null
-        mapView.controller.animateTo(GeoPoint(lat, lng))
-        mapView.controller.setZoom(15.0)
-        mapView.invalidate()
-        avisoBusca = "Mostrando exatamente: $nome"
-        HistoricoUsuarioStore.adicionar(localNome = nome, tipo = "Pesquisa", gravidade = "Baixa", descricao = "Usuário pesquisou e visualizou $nome", lat = lat, lng = lng)
-    }
-
-    fun pesquisarLocalExato() {
-        val textoBusca = busca.trim()
-        if (textoBusca.isBlank()) { avisoBusca = "Digite rua, bairro, cidade ou país para pesquisa exata."; return }
-        avisoBusca = "Pesquisando local exato..."
-        val localFicticio = SafePointDemoData.buscarLocal(textoBusca)
-        if (localFicticio != null) {
-            aplicarLocalExato(localFicticio.lat, localFicticio.lng, localFicticio.nome)
-            return
+    fun carregarLocaisApoio(lat: Double, lng: Double) {
+        // Busca locais cadastrados no OpenStreetMap; nunca cria abrigos fictícios.
+        scope.launch {
+            carregandoLocais = true
+            try {
+                locaisApoioReais = OverpassRepository.buscarLocaisDeApoio(lat, lng, 5000)
+                avisoBusca = if (locaisApoioReais.isEmpty()) {
+                    "Nenhum serviço encontrado nos dados abertos nesta área. Isso não confirma que não existam abrigos."
+                } else {
+                    "${locaisApoioReais.size} locais cadastrados encontrados • confirme funcionamento antes de ir"
+                }
+            } catch (_: Exception) {
+                locaisApoioReais = emptyList()
+                avisoBusca = "Não foi possível consultar os locais agora. Verifique a conexão e tente novamente."
+            } finally {
+                carregandoLocais = false
+                mapView.invalidate()
+            }
         }
+    }
+
+    fun carregarAlertasReais(lat: Double, lng: Double, raioKm: Double = 1000.0, todosGlobais: Boolean = false) {
+        scope.launch {
+            try {
+                val obtidos = mutableListOf<AlertaDemo>()
+                try {
+                    val gdacs = GdacsRepository.buscarDesastres()
+                    gdacs.features.forEach { feature ->
+                        val coords = feature.geometry.coordinates
+                        if (coords.size >= 2) {
+                            val lon = coords[0]; val la = coords[1]
+                            if (la in -90.0..90.0 && lon in -180.0..180.0) {
+                                val props = feature.properties
+                                val tipo = when (props.eventtype.uppercase()) {
+                                    "EQ" -> "Terremoto"; "TC" -> "Ciclone"; "FL" -> "Enchente"
+                                    "VO" -> "Erupção vulcânica"; "DR" -> "Seca"; "WF" -> "Incêndio"
+                                    else -> "Tempestade"
+                                }
+                                val gravidade = when (props.alertlevel.lowercase()) {
+                                    "red" -> "Crítica"; "orange" -> "Alta"; "green" -> "Baixa"; else -> "Média"
+                                }
+                                val nome = props.name.ifBlank { "Evento ${props.eventid.orEmpty()}" }
+                                obtidos.add(AlertaDemo("gdacs-${props.eventid ?: nome.hashCode()}", nome, tipo, gravidade, la, lon, "Fonte: GDACS • Atualização: ${props.pubDate ?: "não informada"}", props.pubDate ?: ""))
+                            }
+                        }
+                    }
+                } catch (_: Exception) { /* a outra fonte ainda pode responder */ }
+                try {
+                    UsgsRepository.buscarUltimos30Dias().forEach { quake ->
+                        val gravidade = when { quake.magnitude >= 6.5 -> "Crítica"; quake.magnitude >= 5.0 -> "Alta"; quake.magnitude >= 3.5 -> "Média"; else -> "Baixa" }
+                        obtidos.add(AlertaDemo("usgs-${quake.timestamp}-${quake.latitude}-${quake.longitude}", quake.nome, "Terremoto", gravidade, quake.latitude, quake.longitude, "Magnitude ${String.format(Locale.US, "%.1f", quake.magnitude)} • Fonte: USGS", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(quake.timestamp))))
+                    }
+                } catch (_: Exception) { /* não apresentar dados simulados em caso de falha */ }
+                val unicos = obtidos.distinctBy { it.id }
+                alertasDoLocal = if (todosGlobais) unicos else unicos.filter { calcularDistancia(lat, lng, it.lat, it.lng) <= raioKm }
+                avisoBusca = if (alertasDoLocal.isEmpty()) "Nenhum alerta encontrado nas fontes consultadas para esta área. Isso não garante ausência de risco." else "${alertasDoLocal.size} alertas reais carregados • fontes GDACS/USGS quando disponíveis"
+                mapView.invalidate()
+            } catch (_: Exception) {
+                alertasDoLocal = emptyList()
+                avisoBusca = "Não foi possível atualizar os alertas reais. Tente novamente quando a conexão estiver disponível."
+            }
+        }
+    }
+
+    fun aplicarLocal(local: CidadeDemo, zoom: Double = 13.0) {
+        cidadeSelecionada = local
+        origem = GeoPoint(local.lat, local.lng)
+        selecionado = null; abrigoSelecionado = null; rotaPontos = emptyList(); rotaInfo = null
+        origem = GeoPoint(local.lat, local.lng)
+        // Consulta fontes reais; o catálogo de cidades serve apenas para centralizar o mapa.
+        carregarAlertasReais(local.lat, local.lng, todosGlobais = local.nome == "Mundo")
+        mapView.controller.animateTo(GeoPoint(local.lat, local.lng))
+        mapView.controller.setZoom(zoom)
+        mapView.invalidate()
+        if (local.nome != "Mundo" && local.nome != "Brasil") carregarLocaisApoio(local.lat, local.lng) else locaisApoioReais = emptyList()
+    }
+
+    fun pesquisarLocal() {
+        val textoBusca = busca.trim()
+        if (textoBusca.isBlank()) { avisoBusca = "Digite uma rua, bairro, cidade, região ou país."; return }
+        avisoBusca = "Pesquisando em Nominatim (OSM)…"
         scope.launch {
             try {
                 val resultados = NominatimRepository.buscarPorNome(textoBusca)
@@ -980,55 +1067,89 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     val lat = resultado.lat.toDoubleOrNull()
                     val lon = resultado.lon.toDoubleOrNull()
                     if (lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0) {
-                        aplicarLocalExato(lat, lon, resultado.display_name.substringBefore(","))
-                        avisoBusca = "Local exato encontrado: ${resultado.display_name.take(90)}"
+                        val encontrado = CidadeDemo(resultado.display_name.substringBefore(","), "", lat, lon)
+                        aplicarLocal(encontrado, 14.0)
+                        avisoBusca = "Encontrado: ${resultado.display_name.take(80)}"
                     } else avisoBusca = "Coordenadas inválidas retornadas."
                 } else avisoBusca = "Local não encontrado. Tente cidade + país."
             } catch (_: Exception) {
-                avisoBusca = "Sem conexão. Mostrando cidades do banco mundial."
+                avisoBusca = "Busca indisponível. Verifique conexão."
             }
         }
     }
 
-    fun calcularRotaReal(destinoLat: Double, destinoLng: Double, nome: String) {
+    fun calcularRota(destinoLat: Double, destinoLng: Double, nome: String) {
+        if (modoRota == ModoRota.ONIBUS) {
+            avisoBusca = "Ônibus indisponível: ainda não há dados GTFS integrados para esta região. Nenhuma rota será inventada."
+            return
+        }
         val inicio = GeoPoint(origem.latitude, origem.longitude)
         val destino = GeoPoint(destinoLat, destinoLng)
-        rotaInfo = null; rotaPontos = emptyList()
-        avisoBusca = "Calculando rota real..."
+        selecionado = null
+        abrigoSelecionado = null
+        rotaInfo = null
+        rotaPontos = emptyList()
+        avisoBusca = "Calculando rota real por ruas…"
         scope.launch {
             try {
-                val rota = ValhallaRepository.buscarRotaCompleta(inicio.longitude, inicio.latitude, destino.longitude, destino.latitude, modoRota.valhallaCosting)
-                if (rota.pontos.size < 2) throw IllegalStateException("Rota inválida")
+                val rota = ValhallaRepository.buscarRotaCompleta(
+                    inicio.longitude, inicio.latitude,
+                    destino.longitude, destino.latitude,
+                    modoRota.valhallaCosting
+                )
+                if (rota.pontos.size < 2 || rota.distanciaMetros <= 0.0 || rota.duracaoSeg <= 0.0) {
+                    throw IllegalStateException("O serviço não retornou uma rota utilizável")
+                }
                 rotaPontos = rota.pontos
                 val km = rota.distanciaMetros / 1000.0
                 val minutos = (rota.duracaoSeg / 60.0).toInt().coerceAtLeast(1)
                 val duracao = if (minutos < 60) "$minutos min" else "${minutos / 60}h ${minutos % 60}min"
                 val distancia = if (km < 1.0) "${rota.distanciaMetros.toInt()} m" else String.format(Locale("pt", "BR"), "%.1f km", km)
-                val chegada = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(java.util.Date(System.currentTimeMillis() + rota.duracaoSeg.toLong() * 1000L))
+                val chegada = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(Date(System.currentTimeMillis() + rota.duracaoSeg.toLong() * 1000L))
                 rotaInfo = RotaInfo(km, minutos, duracao, distancia, chegada)
-                avisoBusca = "Rota calculada • $distancia • $duracao • chegada $chegada"
-                mapView.controller.animateTo(GeoPoint((rotaPontos.minOf { it.latitude } + rotaPontos.maxOf { it.latitude }) / 2.0, (rotaPontos.minOf { it.longitude } + rotaPontos.maxOf { it.longitude }) / 2.0))
+                avisoBusca = "Rota calculada pelo serviço de roteamento • tempo estimado, sujeito a condições locais"
+                mapView.controller.animateTo(GeoPoint(
+                    (rotaPontos.minOf { it.latitude } + rotaPontos.maxOf { it.latitude }) / 2.0,
+                    (rotaPontos.minOf { it.longitude } + rotaPontos.maxOf { it.longitude }) / 2.0
+                ))
                 mapView.controller.setZoom(when { km < 2 -> 15.0; km < 10 -> 13.0; km < 50 -> 10.0; else -> 7.0 })
                 mapView.invalidate()
-                HistoricoUsuarioStore.adicionar(localNome = nome, tipo = "Rota", gravidade = "Média", descricao = "Rota traçada para $nome • $distancia • $duracao", lat = destinoLat, lng = destinoLng, distanciaKm = km)
             } catch (_: Exception) {
-                rotaPontos = listOf(inicio, destino)
-                val km = calcularDistancia(inicio.latitude, inicio.longitude, destino.latitude, destino.longitude)
-                val minutos = (km / 0.05 * 60).toInt().coerceAtLeast(2)
-                val duracao = if (minutos < 60) "$minutos min" else "${minutos / 60}h ${minutos % 60}min"
-                val distancia = String.format(Locale("pt","BR"), "%.1f km", km)
-                val chegada = SimpleDateFormat("HH:mm", Locale("pt","BR")).format(java.util.Date(System.currentTimeMillis() + minutos*60*1000L))
-                rotaInfo = RotaInfo(km, minutos, duracao, distancia, chegada)
-                avisoBusca = "Rota estimada • $distancia • $duracao • chegada $chegada"
+                avisoBusca = "Não foi possível calcular uma rota real agora. Nenhuma linha aproximada foi desenhada. Tente novamente mais tarde."
+                rotaInfo = null
+                rotaPontos = emptyList()
                 mapView.invalidate()
             }
         }
     }
 
     LaunchedEffect(Unit) {
-        if (temPermissao) {
-            obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(12.0); avisoBusca = "Localização atual ativa • Seta azul indica sua posição" }
+        // Localização GPS é opcional. Busca apenas dados reais quando há coordenadas.
+        if (cidadeSelecionada.nome == "Mundo") carregarAlertasReais(0.0, 0.0, todosGlobais = true)
+        else carregarAlertasReais(cidadeSelecionada.lat, cidadeSelecionada.lng)
+        if (temPermissao) obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) }
+    }
+    DisposableEffect(temPermissao) {
+        if (!temPermissao) return@DisposableEffect onDispose { }
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val listener = object : android.location.LocationListener {
+            override fun onLocationChanged(location: android.location.Location) {
+                origem = GeoPoint(location.latitude, location.longitude)
+                gpsAtivo = true
+            }
+            @Deprecated("Deprecated by Android")
+            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) { }
+            override fun onProviderEnabled(provider: String) { }
+            override fun onProviderDisabled(provider: String) { }
         }
+        try {
+            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER).forEach { provider ->
+                    try { if (locationManager.isProviderEnabled(provider)) locationManager.requestLocationUpdates(provider, 4000L, 8f, listener, android.os.Looper.getMainLooper()) } catch (_: Exception) { }
+                }
+            }
+        } catch (_: Exception) { }
+        onDispose { try { locationManager.removeUpdates(listener) } catch (_: Exception) { } }
     }
     DisposableEffect(Unit) { onDispose { try { mapView.onPause(); mapView.onDetach() } catch (_: Exception) {} } }
 
@@ -1036,178 +1157,114 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFF0B2545), Color(0xFF0D5B52)))).statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Shield, null, tint = Color(0xFF75E0A2), modifier = Modifier.size(28.dp))
+                    Icon(Icons.Default.Shield, contentDescription = null, tint = Color(0xFF75E0A2), modifier = Modifier.size(28.dp))
                     Spacer(Modifier.width(9.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("SafePoint • Mapa Profissional", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Text(if (mapaSatelite) "Modo Satélite • Esri World Imagery" else "Modo Ruas • OpenStreetMap • pontos profissionais menores", color = Color(0xFFBCE8D7), fontSize = 11.sp)
+                        Text("SafePoint • Mapa", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text(if (mapaSatelite) "Imagem NASA GIBS • observação da Terra" else "Ruas OpenStreetMap • alertas de fontes abertas", color = Color(0xFFBCE8D7), fontSize = 11.sp)
                     }
+
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(value = busca, onValueChange = { busca = it }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text("Pesquisar rua, bairro, cidade, país exato", fontSize = 12.sp) }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White))
+                    OutlinedTextField(value = busca, onValueChange = { busca = it }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text("Rua, bairro, cidade, região ou país", fontSize = 12.sp) }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(12.dp), colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color.White, unfocusedContainerColor = Color.White))
                     Spacer(Modifier.width(7.dp))
-                    Button(onClick = { pesquisarLocalExato() }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D9A72))) { Text("Ir") }
+                    Button(onClick = { pesquisarLocal() }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D9A72))) { Icon(Icons.Default.Search, null); Text("Ir") }
                 }
-                Text(avisoBusca, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
+                Text(avisoBusca.ifBlank { "${cidadeSelecionada.nome}${if (cidadeSelecionada.uf.isNotBlank() && !cidadeSelecionada.uf.endsWith("-PAIS")) ", ${cidadeSelecionada.uf}" else ""} • ${alertasVisiveis.size} alertas exibidos" }, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
             }
-            LazyRow(modifier = Modifier.fillMaxWidth().height(46.dp).background(Color.White).clipToBounds(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                item { FilterChip(selected = mostrarAbrigos, onClick = { mostrarAbrigos = !mostrarAbrigos }, label = { Text("🟢 Abrigos", fontSize = 11.sp) }) }
+            // Filtros independentes e interativos
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().height(46.dp).background(Color.White).clipToBounds(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                item { FilterChip(selected = mostrarAbrigos, onClick = { mostrarAbrigos = !mostrarAbrigos; if (locaisApoioReais.isEmpty()) Toast.makeText(context, "Locais de apoio verificados exigem uma base atualizada.", Toast.LENGTH_SHORT).show() }, label = { Text("🟢 Locais de apoio", fontSize = 11.sp) }) }
                 items(listOf("Crítica", "Alta", "Média", "Baixa")) { nivel -> FilterChip(selected = nivel in filtroGravidade, onClick = { filtroGravidade = if (nivel in filtroGravidade) filtroGravidade - nivel else filtroGravidade + nivel }, label = { Text(nivel, fontSize = 11.sp) }) }
             }
-            LazyRow(modifier = Modifier.fillMaxWidth().height(44.dp).background(Color.White).clipToBounds(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(SafePointMundoProfissional.tiposAlertaTodos) { tipo -> FilterChip(selected = tipo in filtroTipo, onClick = { filtroTipo = if (tipo in filtroTipo) filtroTipo - tipo else filtroTipo + tipo }, label = { Text(tipo, fontSize = 10.sp) }) }
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().height(42.dp).background(Color.White).clipToBounds(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Seca", "Ciclone", "Terremoto", "Erupção vulcânica")) { tipo -> FilterChip(selected = tipo in filtroTipo, onClick = { filtroTipo = if (tipo in filtroTipo) filtroTipo - tipo else filtroTipo + tipo }, label = { Text(tipo, fontSize = 10.sp) }) }
             }
+            // O mapa ocupa somente o espaço restante entre os filtros e a navegação inferior.
+            // clipToBounds impede que a superfície nativa do OSMDroid desenhe fora do seu retângulo.
             Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp, vertical = 4.dp).clipToBounds()) {
                 AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().clipToBounds()) { view ->
                     view.overlays.removeAll { it is Marker || it is Polyline }
                     if (rotaPontos.isNotEmpty()) {
-                        val linha = Polyline().apply { setPoints(rotaPontos); outlinePaint.color = android.graphics.Color.rgb(33, 150, 243); outlinePaint.strokeWidth = 7f; outlinePaint.strokeCap = Paint.Cap.ROUND; outlinePaint.strokeJoin = Paint.Join.ROUND }
+                        val linha = Polyline().apply { setPoints(rotaPontos); outlinePaint.color = android.graphics.Color.rgb(65, 160, 255); outlinePaint.strokeWidth = 9f; outlinePaint.strokeCap = Paint.Cap.ROUND; outlinePaint.strokeJoin = Paint.Join.ROUND }
                         view.overlays.add(linha)
                     }
                     alertasVisiveis.forEach { a ->
                         val marker = Marker(view).apply {
                             position = GeoPoint(a.lat, a.lng); title = "${a.tipo} • ${a.gravidade}"
-                            val dist = calcularDistancia(origem.latitude, origem.longitude, a.lat, a.lng)
-                            snippet = "${a.cidade} — ${a.descricao.take(60)} • ${formatarDistanciaKm(dist)}"
-                            icon = criarPinoAlertaProfissionalMenor(context, a.gravidade, a.tipo, 30)
+                            val distanciaAlerta = calcularDistancia(origem.latitude, origem.longitude, a.lat, a.lng)
+                            snippet = "${a.cidade} — ${a.descricao} • ${formatarDistanciaKm(distanciaAlerta)} de você"
+                            icon = criarPinoDesastreNivel(context, when (a.gravidade) { "Crítica" -> "Red"; "Alta" -> "Orange"; "Média" -> "Yellow"; else -> "Green" }, 48)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            setOnMarkerClickListener { _, _ -> selecionado = a; abrigoSelecionado = null; HistoricoUsuarioStore.adicionar(localNome = a.cidade, tipo = a.tipo, gravidade = a.gravidade, descricao = "Visualizou alerta: ${a.descricao}", lat = a.lat, lng = a.lng, distanciaKm = dist); true }
+                            setOnMarkerClickListener { _, _ -> selecionado = a; abrigoSelecionado = null; true }
                         }; view.overlays.add(marker)
                     }
                     abrigosVisiveis.forEach { a ->
                         val marker = Marker(view).apply {
-                            position = GeoPoint(a.lat, a.lng); title = a.nome; snippet = "${a.cidade} • ${a.tipoAbrigo} • ponto de apoio"
-                            icon = criarPinoAbrigoProfissionalMenor(context, a.tipoAbrigo, 28)
+                            position = GeoPoint(a.lat, a.lng); title = "${a.nome}"; snippet = "${a.cidade} • local listado no OpenStreetMap; confirme funcionamento e segurança antes de se deslocar"
+                            icon = criarPinoSeguranca(context, when (a.cidade) { "Hospital" -> "hospital"; "Polícia" -> "police"; "Bombeiros" -> "fire_station"; "Igreja/templo" -> "place_of_worship"; "Escola" -> "school"; else -> "shelter" }, Color(0xFF168CBA), 44)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            setOnMarkerClickListener { _, _ -> abrigoSelecionado = a; selecionado = null; HistoricoUsuarioStore.adicionar(localNome = a.cidade, tipo = a.tipoAbrigo, gravidade = "Baixa", descricao = "Visualizou abrigo: ${a.nome}", lat = a.lat, lng = a.lng); true }
+                            setOnMarkerClickListener { _, _ -> abrigoSelecionado = a; selecionado = null; true }
                         }; view.overlays.add(marker)
                     }
-                    if (gpsAtivo || temPermissao) {
-                        val m = Marker(view).apply {
-                            position = origem; title = "Você está aqui"; snippet = "Seta azul indica sua posição atual"; icon = criarPinoSetaAzul(context, 38); setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                        }
+                    if (gpsAtivo) {
+                        val m = Marker(view).apply { position = origem; title = "Sua posição GPS"; snippet = "Localização fornecida pelo aparelho"; icon = criarPinoSeguranca(context, null, Color(0xFF1976D2), 42); setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM) }
                         view.overlays.add(m)
                     }
                     view.invalidate()
                 }
                 Column(Modifier.align(Alignment.TopEnd).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SmallFloatingActionButton(onClick = { mapaSatelite = !mapaSatelite }, containerColor = Color.White) { Icon(Icons.Default.SatelliteAlt, if (mapaSatelite) "Mostrar ruas" else "Mostrar satélite", tint = Color(0xFF0B2545)) }
+                    SmallFloatingActionButton(onClick = { mapaSatelite = !mapaSatelite }, containerColor = Color.White) { Icon(Icons.Default.Map, if (mapaSatelite) "Mostrar ruas" else "Mostrar satélite", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble + 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Add, "Aumentar zoom", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble - 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Remove, "Diminuir zoom", tint = Color(0xFF0B2545)) }
-                    SmallFloatingActionButton(onClick = { obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate() } }, containerColor = Color(0xFFE3F2FD)) { Icon(Icons.Default.Navigation, "Minha localização - seta azul", tint = Color(0xFF1976D2)) }
+                    SmallFloatingActionButton(onClick = { if (!temPermissao) permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) else obterLocalizacao(context) { lat, lng -> origem = GeoPoint(lat, lng); gpsAtivo = true; mapView.controller.animateTo(origem); mapView.controller.setZoom(14.0); mapView.invalidate(); carregarLocaisApoio(lat, lng); carregarAlertasReais(lat, lng) } }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
+                    SmallFloatingActionButton(onClick = { mapView.controller.animateTo(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng)); mapView.controller.setZoom(if (cidadeSelecionada.nome == "Brasil") 4.3 else 11.0); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.LocationOn, "Centralizar pesquisa", tint = Color(0xFF0B2545)) }
                 }
-                Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text(if (mapaSatelite) "© Esri • Satélite" else "© OpenStreetMap", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
+                Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(8.dp)) { Text(if (mapaSatelite) "NASA GIBS • imagem com atualização defasada" else "© OpenStreetMap contributors", color = Color(0xFF34495E), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) }
                 Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), color = Color(0xE60B2545), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFE53935), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Crítica", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFFFF9800), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Alta", color = Color.White, fontSize = 9.sp) }
                         Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFFD5A51B), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Média", color = Color.White, fontSize = 9.sp); Spacer(Modifier.width(8.dp)); Box(Modifier.size(8.dp).background(Color(0xFF43A047), CircleShape)); Spacer(Modifier.width(4.dp)); Text("Baixa", color = Color.White, fontSize = 9.sp) }
-                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Navigation, null, tint = Color(0xFF2196F3), modifier = Modifier.size(12.dp)); Spacer(Modifier.width(5.dp)); Text("Você • seta azul", color = Color.White, fontSize = 9.sp) }
+                        Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).background(Color(0xFF20A464), CircleShape)); Spacer(Modifier.width(5.dp)); Text("Local de apoio próximo", color = Color.White, fontSize = 9.sp) }
                     }
                 }
             }
+            // Cartão selecionado e cálculo de deslocamento local
             val aSel = selecionado; val abrSel = abrigoSelecionado
-            if (aSel != null) {
+            if (aSel != null || abrSel != null) {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(4.dp)) {
                     Column(Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(32.dp).clip(CircleShape).background(when(aSel.gravidade){"Crítica"->Color(0xFFE53935);"Alta"->Color(0xFFFF9800);"Média"->Color(0xFFFFC107);else->Color(0xFF43A047)}), contentAlignment = Alignment.Center){ Text(aSel.tipo.first().toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)){ Text("${aSel.tipo} • ${aSel.cidade}", fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 14.sp); Text("Gravidade: ${aSel.gravidade} • ${aSel.bairro}", fontSize = 11.sp, color = Color.Gray) }
-                            IconButton(onClick = { selecionado = null }){ Icon(Icons.Default.Close, null) }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Text(aSel.descricao, fontSize = 12.sp, color = Color(0xFF334155), lineHeight = 16.sp)
-                        Spacer(Modifier.height(6.dp))
-                        Text("Publicado em: ${aSel.dataHora}", fontSize = 10.sp, color = Color.Gray)
-                        val distKm = calcularDistancia(origem.latitude, origem.longitude, aSel.lat, aSel.lng)
-                        Text("Distância de você: ${formatarDistanciaKm(distKm)}", fontSize = 11.sp, color = azulLinhas, fontWeight = FontWeight.SemiBold)
+                        Text(if (aSel != null) "${aSel.tipo} • ${aSel.cidade}" else abrSel!!.nome, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 14.sp)
+                        Text(if (aSel != null) "${aSel.gravidade} • ${aSel.descricao} • ${formatarDistanciaKm(calcularDistancia(origem.latitude, origem.longitude, aSel.lat, aSel.lng))} de você" else "Local listado em mapa público; confirme se está aberto e se é seguro para acolhimento", fontSize = 11.sp, color = Color.Gray)
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 7.dp)) {
-                            listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; calcularRotaReal(aSel.lat, aSel.lng, aSel.cidade) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
+                            listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; if (aSel != null) calcularRota(aSel.lat, aSel.lng, aSel.cidade) else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
+                            FilterChip(selected = false, onClick = { avisoBusca = "Ônibus: falta integrar uma base GTFS válida para a área pesquisada." }, label = { Text("Ônibus (indisponível)", fontSize = 10.sp) })
                         }
-                        Button(onClick = { calcularRotaReal(aSel.lat, aSel.lng, aSel.cidade) }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))) { Icon(Icons.Default.Route, null); Spacer(Modifier.width(7.dp)); Text("Traçar rota • Ver tempo, chegada e km") }
-                        rotaInfo?.let { info -> 
-                            Surface(Modifier.fillMaxWidth().padding(top = 8.dp), shape = RoundedCornerShape(10.dp), color = Color(0xFFE3F2FD)){
-                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically){
-                                    Icon(Icons.Default.AccessTime, null, tint = Color(0xFF1976D2)); Spacer(Modifier.width(8.dp))
-                                    Column(Modifier.weight(1f)){
-                                        Text("${info.distanciaTexto} • ${info.duracaoTexto}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0B2545))
-                                        Text("Chegada estimada: ${info.chegadaTexto} • Modo: ${modoRota.titulo}", fontSize = 11.sp, color = Color.Gray)
-                                    }
-                                }
-                            }
-                        }
+                        Button(onClick = { if (aSel != null) calcularRota(aSel.lat, aSel.lng, aSel.cidade) else calcularRota(abrSel!!.lat, abrSel.lng, abrSel.nome) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1267A5))) { Icon(Icons.Default.Route, null); Spacer(Modifier.width(7.dp)); Text("Calcular deslocamento") }
                     }
                 }
             }
-            if (abrSel != null) {
-                Card(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(4.dp)) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically){
-                            Box(Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF2E7D32)), contentAlignment = Alignment.Center){ Icon(Icons.Default.Home, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)){ Text(abrSel.nome, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 14.sp); Text("${abrSel.tipoAbrigo} • ${abrSel.cidade}", fontSize = 11.sp, color = Color.Gray) }
-                            IconButton(onClick = { abrigoSelecionado = null }){ Icon(Icons.Default.Close, null) }
-                        }
-                        val distKm = calcularDistancia(origem.latitude, origem.longitude, abrSel.lat, abrSel.lng)
-                        Text("Distância: ${formatarDistanciaKm(distKm)} • Local seguro", fontSize = 12.sp, color = Color(0xFF334155), modifier = Modifier.padding(top = 6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 7.dp)) {
-                            listOf(ModoRota.CARRO, ModoRota.A_PE, ModoRota.BICICLETA).forEach { modo -> FilterChip(selected = modoRota == modo, onClick = { modoRota = modo; calcularRotaReal(abrSel.lat, abrSel.lng, abrSel.nome) }, label = { Text(modo.titulo, fontSize = 10.sp) }) }
-                        }
-                        Button(onClick = { calcularRotaReal(abrSel.lat, abrSel.lng, abrSel.nome) }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) { Icon(Icons.Default.Route, null); Spacer(Modifier.width(7.dp)); Text("Traçar rota até abrigo") }
-                        rotaInfo?.let { info -> 
-                            Surface(Modifier.fillMaxWidth().padding(top = 8.dp), shape = RoundedCornerShape(10.dp), color = Color(0xFFE8F5E9)){
-                                Row(Modifier.padding(10.dp)){
-                                    Icon(Icons.Default.Directions, null, tint = Color(0xFF2E7D32)); Spacer(Modifier.width(8.dp))
-                                    Column{ Text("${info.distanciaTexto} • ${info.duracaoTexto}", fontWeight = FontWeight.Bold, fontSize = 13.sp); Text("Chegada: ${info.chegadaTexto}", fontSize = 11.sp, color = Color.Gray) }
-                                }
-                            }
-                        }
+            rotaInfo?.let { info ->
+                Surface(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp), shape = RoundedCornerShape(12.dp), color = Color(0xFFE5F3FF)) {
+                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Route, null, tint = Color(0xFF1267A5)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text("Rota • ${modoRota.titulo}", fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("${info.distanciaTexto} • ${info.duracaoTexto}", fontSize = 12.sp, color = Color(0xFF1267A5)); Text("Chegada estimada: ${info.chegadaTexto} • sem previsão de trânsito", fontSize = 9.sp, color = Color.Gray) }; IconButton(onClick = { rotaInfo = null; rotaPontos = emptyList(); mapView.invalidate() }) { Icon(Icons.Default.Close, "Fechar rota") }
                     }
                 }
             }
-            Text("Mapa com pontos fictícios distribuídos uniformemente em todas as cidades do mundo • sem aglomeração • ícones profissionais menores • seta azul indica você • satélite Esri", modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), fontSize = 9.sp, color = Color(0xFF8A3D28), textAlign = TextAlign.Center)
+            Text(if (alertasDoLocal.isEmpty()) "Nenhum alerta encontrado nas fontes consultadas nesta visualização. Isso não garante ausência de risco. Abrigos e serviços dependem dos dados abertos disponíveis." else "Alertas de fontes externas GDACS/USGS quando disponíveis; confira os detalhes e a hora da atualização.", modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), fontSize = 9.sp, color = Color(0xFF8A3D28), textAlign = TextAlign.Center)
         }
     }
 }
 
-
-
-fun criarPinoDesastreNivel(context: Context, nivelAlerta: String, tamanhoPx: Int): android.graphics.drawable.Drawable {
-    val grav = when(nivelAlerta){ "Red"->"Crítica"; "Orange"->"Alta"; "Yellow"->"Média"; else->"Baixa" }
-    return criarPinoAlertaProfissionalMenor(context, grav, "!", tamanhoPx.coerceAtMost(32))
-}
-
-fun criarPinoDesastre(context: Context, tamanhoPx: Int): android.graphics.drawable.Drawable {
-    return criarPinoAlertaProfissionalMenor(context, "Crítica", "!", tamanhoPx.coerceAtMost(32))
-}
-
-fun criarPinoSeguranca(context: Context, categoria: String?, corFundo: Color, tamanhoPx: Int): android.graphics.drawable.Drawable {
-    val tipo = when(categoria){ "hospital"->"Hospital"; "fire_station"->"Bombeiros"; "police"->"Polícia"; "shelter"->"Abrigo"; "pharmacy"->"Farmácia"; else->"Abrigo" }
-    return criarPinoAbrigoProfissionalMenor(context, tipo, tamanhoPx.coerceAtMost(30))
-}
-
-fun criarIconeLocalizacao(tamanhoPx: Int): android.graphics.Bitmap {
-    val size = tamanhoPx.coerceAtLeast(28)
-    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
-    val centro = size / 2f
-    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = android.graphics.Paint.Style.FILL }
-    canvas.drawCircle(centro, centro, size * 0.46f, paint)
-    paint.color = android.graphics.Color.rgb(33, 150, 243)
-    canvas.drawCircle(centro, centro, size * 0.38f, paint)
-    paint.color = android.graphics.Color.WHITE
-    val path = android.graphics.Path().apply {
-        moveTo(centro, centro - size*0.28f)
-        lineTo(centro - size*0.18f, centro + size*0.18f)
-        lineTo(centro - size*0.05f, centro + size*0.10f)
-        lineTo(centro + size*0.05f, centro + size*0.10f)
-        lineTo(centro + size*0.18f, centro + size*0.18f)
-        close()
-    }
-    canvas.drawPath(path, paint)
-    return bitmap
-}
 
 
 @Composable fun ItemNavegacao(label: String, icon: ImageVector, ativo: Boolean, onClick: () -> Unit) { val cor = if (ativo) SafePointBlue else Color.Gray; Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onClick() }.padding(12.dp, 4.dp)) { Icon(icon, null, tint = cor, modifier = Modifier.size(24.dp)); Text(label, fontSize = 11.sp, color = cor) } }
@@ -1359,7 +1416,6 @@ object OsrmRepository {
 
 // Histórico por localidade com detalhes e filtros.
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun TelaHistoricoReal(navController: NavController) {
     val context = LocalContext.current
@@ -1452,6 +1508,8 @@ object OsrmRepository {
 
 
 
+
+
 object SafePointDemoSession { var local: CidadeDemo = SafePointDemoData.localInicial }
 
 fun traduzirNomeEvento(nomeFonte: String, tipoPortuguese: String): String {
@@ -1486,19 +1544,7 @@ fun formatarDataAlerta(dataFonte: String?): String {
     return dataFonte
 }
 
-fun criarIconeLocalizacao(tamanhoPx: Int): android.graphics.Bitmap {
-    val size = tamanhoPx.coerceAtLeast(24)
-    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(bitmap)
-    val centro = size / 2f
-    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = android.graphics.Paint.Style.FILL }
-    canvas.drawCircle(centro, centro, size * 0.43f, paint)
-    paint.color = android.graphics.Color.rgb(25, 118, 210)
-    canvas.drawCircle(centro, centro, size * 0.34f, paint)
-    paint.color = android.graphics.Color.WHITE
-    canvas.drawCircle(centro, centro, size * 0.10f, paint)
-    return bitmap
-}
+
 
 fun calcularDistancia(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double { val R = 6371.0; val dLat = Math.toRadians(lat2 - lat1); val dLon = Math.toRadians(lon2 - lon1); val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); return R * c }
 fun formatarDistanciaKm(km: Double): String = if (km < 1.0) "${(km * 1000).toInt()} m" else String.format(Locale("pt", "BR"), "%.1f km", km)
