@@ -371,7 +371,6 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
 }
 
 @Composable
-@Composable
 fun TelaTermosUso(onAceitar: () -> Unit) {
     var aceitou by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
