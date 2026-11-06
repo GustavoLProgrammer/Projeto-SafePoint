@@ -371,6 +371,7 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
 }
 
 @Composable
+@Composable
 fun TelaTermosUso(onAceitar: () -> Unit) {
     var aceitou by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -846,15 +847,18 @@ fun criarPinoAbrigoVerde(context: Context, tamanhoPx: Int): android.graphics.dra
 fun criarPinoGpsReal(context: Context, tamanhoPx: Int): android.graphics.drawable.Drawable {
     val w = tamanhoPx
     val bmp = Bitmap.createBitmap(w, w, Bitmap.Config.ARGB_8888); val canvas = AndroidCanvas(bmp)
-    val cx = w / 2f; val cy = w / 2f; val raio = w / 2f - 3f
-    val sombra = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.argb(70, 0, 0, 0) }
-    canvas.drawCircle(cx, cy + 2f, raio, sombra)
-    val fundo = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(25, 118, 210); style = Paint.Style.FILL }
-    canvas.drawCircle(cx, cy, raio, fundo)
-    val borda = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 3f }
-    canvas.drawCircle(cx, cy, raio - 1.5f, borda)
-    val centro = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
-    canvas.drawCircle(cx, cy, raio * 0.35f, centro)
+    val cx = w / 2f; val cy = w / 2f
+    val paintSeta = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(25, 118, 210); style = Paint.Style.FILL }
+    val paintBorda = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 3f; strokeJoin = Paint.Join.ROUND }
+    val path = AndroidPath().apply {
+        moveTo(cx, 2f)
+        lineTo(w - 4f, w - 6f)
+        lineTo(cx, w - 14f)
+        lineTo(4f, w - 6f)
+        close()
+    }
+    canvas.drawPath(path, paintSeta)
+    canvas.drawPath(path, paintBorda)
     return BitmapDrawable(context.resources, bmp)
 }
 
