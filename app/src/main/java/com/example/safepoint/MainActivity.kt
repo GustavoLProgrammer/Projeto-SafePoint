@@ -1121,7 +1121,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             try {
                 val rota = ValhallaRepository.buscarRotaCompleta(
                     origem.longitude, origem.latitude,
-                    abrigo.longitude, abrigo.latitude,
+                    abrigo.lng, abrigo.lat,
                     modoRota.valhallaCosting,
                     alertaEvitar?.let { GeoPoint(it.lat, it.lng) }
                 )
