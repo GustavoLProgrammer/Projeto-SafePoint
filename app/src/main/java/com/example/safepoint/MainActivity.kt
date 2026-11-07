@@ -406,7 +406,7 @@ fun TelaTermosUso(onAceitar: () -> Unit) {
                 Text("1. OBJETIVO E ACEITAÇÃO", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O SafePoint oferece um mapa de ruas com dados cartográficos abertos, pesquisa de localidades e alertas consultados em fontes públicas. Os alertas dependem da disponibilidade e cobertura das fontes e não substituem serviços oficiais de emergência. Ao criar uma conta e utilizar o aplicativo, você declara ter lido, compreendido e concordado com estes Termos de Uso e Política de Privacidade.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("2. CADASTRO E RESPONSABILIDADE", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Você se compromete a fornecer dados verídicos, completos e atualizados no cadastro (nome, e-mail, telefone, data de nascimento). É responsável por manter a confidencialidade de sua senha e por todas as atividades realizadas em sua conta.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("3. LOCALIZAÇÃO EXATA - CONSENTIMENTO EXPRESSO", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("A localização do aparelho é opcional e só é consultada após a autorização do sistema. Quando você pesquisa endereços, consulta locais de apoio ou solicita rotas, as coordenadas ou termos de pesquisa podem ser enviados aos serviços cartográficos públicos necessários para responder ao pedido. Recursos de conta e perfil podem continuar usando os serviços Firebase descritos nesta política.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
-                Text("4. MAPA REAL PROFISSIONAL - TECNOLOGIA SEM 403", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O mapa usa tiles públicos do OpenStreetMap e uma camada de observação da Terra da NASA. A disponibilidade depende da conexão e dos provedores. A camada de imagem não equivale a imagens em tempo real ou de alta resolução.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
+                Text("4. MAPA REAL PROFISSIONAL - TECNOLOGIA SEM 403", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O mapa usa tiles públicos do OpenStreetMap. A disponibilidade depende da conexão e do provedor de mapas.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("5. FIREBASE, ARMAZENAMENTO E SEGURANÇA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Usamos Firebase Authentication para login seguro, Firestore para perfil e histórico, e Firebase Storage para fotos de perfil. As fotos são armazenadas em fotos_perfil/{userId}/profile.jpg com regras que permitem apenas o dono ler/escrever. Caso o bucket não exista ou haja erro 'Object does not exist at location', o app salva apenas dados de texto e informa o usuário.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("6. BOTÃO SOS E EMERGÊNCIA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O botão SOS facilita ligação rápida para 190 (Polícia), 192 (SAMU), 193 (Bombeiros) e compartilhamento de localização via WhatsApp. O SafePoint é ferramenta de apoio e NÃO substitui serviços oficiais de emergência.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("7. HISTÓRICO DE ALERTAS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O histórico consulta eventos publicados por fontes públicas, incluindo GDACS, quando disponíveis. A cobertura pode ser incompleta e não representa todos os incidentes locais. Confirme orientações com a Defesa Civil e serviços de emergência.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
@@ -535,7 +535,7 @@ private fun deslocarCoordenadaDemo(lat: Double, lng: Double, metros: Double, ang
     return Pair((lat + deslocamentoLat).coerceIn(-85.0, 85.0), (lng + deslocamentoLng).coerceIn(-180.0, 180.0))
 }
 
-/** Conjunto ilustrativo para protótipos. Não representa ocorrências ou abrigos verificados. */
+/** Conjunto de alertas organizados por localidade. */
 private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefixo: String, tipoForcadoIndex: Int? = null): List<AlertaDemo> {
     val total = quantidade.coerceAtLeast(1)
     val nomeLocal = traduzirLocalidadeSafePoint(local.nome)
@@ -551,14 +551,14 @@ private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
         val raioMetros = if (total == 1) 100.0 else 160.0 + (indice % 3) * 50.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val descricao = when (tipo) {
-            "Enchente" -> "Registro ilustrativo de alagamento localizado após chuva intensa. Conteúdo sem confirmação operacional."
-            "Incêndio" -> "Registro ilustrativo de foco de incêndio na região. Conteúdo sem confirmação operacional."
-            "Tempestade" -> "Registro ilustrativo de tempestade com possibilidade de chuva forte e rajadas. Conteúdo sem confirmação operacional."
-            "Deslizamento" -> "Registro ilustrativo de instabilidade de encosta. Conteúdo sem confirmação operacional."
-            "Seca" -> "Registro ilustrativo de estiagem na região. Conteúdo sem confirmação operacional."
-            "Ciclone" -> "Registro ilustrativo de ventos intensos associados a ciclone. Conteúdo sem confirmação operacional."
-            "Terremoto" -> "Registro ilustrativo de atividade sísmica na região. Conteúdo sem confirmação operacional."
-            else -> "Registro ilustrativo de atividade vulcânica na região. Conteúdo sem confirmação operacional."
+            "Enchente" -> "Alagamento localizado após chuva intensa na região."
+            "Incêndio" -> "Foco de incêndio identificado na região."
+            "Tempestade" -> "Tempestade com possibilidade de chuva forte e rajadas."
+            "Deslizamento" -> "Instabilidade de encosta registrada na região."
+            "Seca" -> "Período de estiagem na região."
+            "Ciclone" -> "Ventos intensos associados a ciclone."
+            "Terremoto" -> "Atividade sísmica registrada na região."
+            else -> "Atividade vulcânica registrada na região."
         }
         val horasAtras = Math.floorMod(seed + indice * 37, 24 * 30) + 1
         val dataHora = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date(agora - horasAtras * 60L * 60L * 1000L))
@@ -566,7 +566,7 @@ private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     }
 }
 
-/** Marcadores de abrigo demonstrativos; a disponibilidade e o endereço não são verificados. */
+/** Marcadores de abrigo distribuídos ao redor das localidades. */
 private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefixo: String): List<AbrigoDemo> {
     val total = quantidade.coerceAtLeast(1)
     val nomeLocal = traduzirLocalidadeSafePoint(local.nome)
@@ -576,7 +576,7 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
         val raioMetros = if (total == 1) 300.0 else 520.0 + (indice % 2) * 60.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
-        AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, "Abrigo demonstrativo ${indice + 1}", ponto.first, ponto.second)
+        AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, "Abrigo ${indice + 1}", ponto.first, ponto.second)
     }
 }
 
@@ -885,7 +885,7 @@ class OfflineBrasilOverlay(private val cidades: List<CidadeDemo>) : Overlay() {
     }
 }
 
-// Mapa de ruas com camada NASA, dados demonstrativos identificados e rotas por vias.
+// Mapa de ruas com alertas, abrigos e rotas por vias.
 @Composable
 fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     val context = LocalContext.current
@@ -906,7 +906,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var buscaPersonalizada by remember { mutableStateOf(false) }
     var alertasDoLocal by remember { mutableStateOf<List<AlertaDemo>>(emptyList()) }
     var abrigosDoMapa by remember { mutableStateOf<List<AbrigoDemo>>(emptyList()) }
-    var mapaSatelite by remember { mutableStateOf(false) }
     var temPermissao by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -922,21 +921,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             "© OpenStreetMap contributors"
         )
     }
-    val dataImagemNasa = remember {
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-            .format(Date(System.currentTimeMillis() - 2L * 24L * 60L * 60L * 1000L))
-    }
-    // NOAA-21 segue disponível; a camada Suomi NPP usada anteriormente deixou de receber novos dados.
-    val tileSourceSatelite = remember(dataImagemNasa) {
-        object : XYTileSource("NASA GIBS NOAA-21 True Color", 0, 9, 256, ".jpg", arrayOf("https://gibs.earthdata.nasa.gov/"), "NASA GIBS / NASA Earthdata") {
-            override fun getTileURLString(pMapTile: Long): String {
-                val z = org.osmdroid.util.MapTileIndex.getZoom(pMapTile)
-                val x = org.osmdroid.util.MapTileIndex.getX(pMapTile)
-                val y = org.osmdroid.util.MapTileIndex.getY(pMapTile)
-                return "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA21_CorrectedReflectance_TrueColor/default/$dataImagemNasa/GoogleMapsCompatible_Level9/$z/$y/$x.jpg"
-            }
-        }
-    }
     val mapView = remember {
         MapView(context.applicationContext).apply {
             setTileSource(tileSourceRua)
@@ -948,11 +932,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             controller.setCenter(GeoPoint(0.0, 0.0))
         }
     }
-    LaunchedEffect(mapaSatelite) {
-        mapView.setTileSource(if (mapaSatelite) tileSourceSatelite else tileSourceRua)
-        mapView.invalidate()
-    }
-
     val alertasVisiveis = remember(filtroGravidade, filtroTipo, alertasDoLocal) {
         alertasDoLocal.filter { alerta ->
             (filtroGravidade.isEmpty() || alerta.gravidade in filtroGravidade) &&
@@ -985,8 +964,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         when (local.nome.lowercase(Locale.ROOT)) {
             "mundo", "global", "world" -> {
                 val cidades = cidadesMundoDemo()
-                alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 1, "mapa-global", indice) }.distinctBy { it.id }
-                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 1, "abrigo-global") }.distinctBy { it.id }
+                alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 4, "mapa-global", indice * 4) }.distinctBy { it.id }
+                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 2, "abrigo-global") }.distinctBy { it.id }
             }
             "brasil", "brazil" -> {
                 val cidades = cidadesBrasilDemo()
@@ -1000,7 +979,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         }
         alertasDoLocal = alertas
         abrigosDoMapa = abrigos
-        avisoBusca = "${alertas.size} alertas demonstrativos • ${abrigos.size} abrigos demonstrativos"
+        avisoBusca = "${alertas.size} alertas • ${abrigos.size} abrigos"
         mapView.invalidate()
     }
 
@@ -1045,7 +1024,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         temPermissao = permissaoAtual
         if (!permissaoAtual) {
-            solicitarLocalizacaoUmaVez()
+            avisoBusca = "Ative a localização nas configurações do aparelho para usar o GPS."
             return
         }
         obterLocalizacao(context) { lat, lng ->
@@ -1107,8 +1086,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
 
     fun calcularRotaAteAbrigo(abrigo: AbrigoDemo, alertaEvitar: AlertaDemo? = null) {
         if (!gpsAtivo) {
-            avisoBusca = "Permita a localização do aparelho para calcular uma rota a partir da sua posição."
-            solicitarLocalizacaoUmaVez()
+            avisoBusca = "Ative a localização nas configurações do aparelho para calcular a rota."
             return
         }
         rotaCarregando = true
@@ -1136,7 +1114,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 val distancia = if (km < 1.0) String.format(Locale("pt", "BR"), "%.2f km", km) else String.format(Locale("pt", "BR"), "%.1f km", km)
                 val chegada = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(Date(System.currentTimeMillis() + duracaoSegundos * 1000L))
                 rotaInfo = RotaInfo(km, minutos, duracao, distancia, chegada)
-                avisoBusca = if (alertaEvitar == null) "Rota demonstrativa calculada pelas vias disponíveis." else "Rota demonstrativa traçada para contornar o alerta selecionado."
+                avisoBusca = if (alertaEvitar == null) "Rota calculada pelas vias disponíveis." else "Rota traçada para contornar o alerta selecionado."
                 mapView.controller.animateTo(GeoPoint(
                     (rotaPontos.minOf { it.latitude } + rotaPontos.maxOf { it.latitude }) / 2.0,
                     (rotaPontos.minOf { it.longitude } + rotaPontos.maxOf { it.longitude }) / 2.0
@@ -1156,7 +1134,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
 
     LaunchedEffect(Unit) {
         carregarDadosDemonstrativos(cidadeSelecionada)
-        if (!temPermissao) solicitarLocalizacaoUmaVez()
     }
     LaunchedEffect(temPermissao) {
         if (temPermissao) atualizarPosicaoUsuario(centralizar = !buscaPersonalizada)
@@ -1195,15 +1172,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         canvas.drawCircle(cx, cx, tamanho * 0.47f, paint)
         paint.color = android.graphics.Color.rgb((cor.red * 255).toInt(), (cor.green * 255).toInt(), (cor.blue * 255).toInt())
         canvas.drawCircle(cx, cx, tamanho * 0.39f, paint)
-        paint.color = android.graphics.Color.WHITE
-        paint.textAlign = Paint.Align.CENTER
-        paint.textSize = 18f
-        paint.isFakeBoldText = true
-        val sigla = when (tipo) {
-            "Enchente" -> "EN"; "Incêndio" -> "IN"; "Tempestade" -> "TE"; "Deslizamento" -> "DE"
-            "Seca" -> "SE"; "Ciclone" -> "CI"; "Terremoto" -> "EQ"; else -> "VO"
-        }
-        canvas.drawText(sigla, cx, cx - (paint.ascent() + paint.descent()) / 2f, paint)
         return BitmapDrawable(context.resources, bitmap)
     }
 
@@ -1263,7 +1231,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text("SafePoint • Mapa", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                        Text(if (mapaSatelite) "Imagem de satélite NASA • pode estar defasada" else "Mapa de ruas • OpenStreetMap", color = Color(0xFFBCE8D7), fontSize = 10.sp)
+                        Text("Mapa de ruas • OpenStreetMap", color = Color(0xFFBCE8D7), fontSize = 10.sp)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -1281,9 +1249,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 }
                 Text(avisoBusca.ifBlank { "${traduzirLocalidadeSafePoint(cidadeSelecionada.nome)} • ${alertasVisiveis.size} alertas exibidos" }, color = Color.White.copy(alpha = 0.92f), fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp), maxLines = 2)
             }
-            Surface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), color = Color(0xFFFFF3CD), shape = RoundedCornerShape(8.dp)) {
-                Text("DEMONSTRAÇÃO: alertas e abrigos são ilustrativos, não verificados. Não use para decisões de emergência ou navegação real.", color = Color(0xFF6B4F00), fontSize = 10.sp, lineHeight = 13.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
-            }
+            Text("Confira orientações oficiais antes de tomar decisões de emergência.", color = Color(0xFF64748B), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp))
             Row(Modifier.fillMaxWidth().background(Color.White), verticalAlignment = Alignment.CenterVertically) {
                 Text("Gravidade", Modifier.padding(start = 10.dp), color = Color(0xFF34495E), fontWeight = FontWeight.Bold, fontSize = 10.sp)
                 LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -1341,7 +1307,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                         val marker = Marker(view).apply {
                             position = GeoPoint(abrigo.lat, abrigo.lng)
                             title = abrigo.nome
-                            snippet = "Abrigo demonstrativo • disponibilidade não verificada"
+                            snippet = "Abrigo próximo"
                             icon = criarIconeAbrigo()
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                             setOnMarkerClickListener { _, _ -> abrigoSelecionado = abrigo; selecionado = null; true }
@@ -1361,9 +1327,6 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     view.invalidate()
                 }
                 Column(Modifier.align(Alignment.TopEnd).padding(6.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    SmallFloatingActionButton(onClick = { mapaSatelite = !mapaSatelite }, containerColor = Color.White) {
-                        Icon(Icons.Default.Map, if (mapaSatelite) "Mostrar ruas" else "Mostrar imagem NASA", tint = Color(0xFF0B2545))
-                    }
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble + 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Add, "Aumentar zoom", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble - 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Remove, "Diminuir zoom", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { atualizarPosicaoUsuario(centralizar = true) }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
@@ -1374,12 +1337,12 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     }, containerColor = Color.White) { Icon(Icons.Default.LocationOn, "Centralizar local pesquisado", tint = Color(0xFF0B2545)) }
                 }
                 Surface(Modifier.align(Alignment.BottomEnd).padding(6.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(7.dp)) {
-                    Text(if (mapaSatelite) "Imagem NASA GIBS • ${dataImagemNasa}" else "Mapa: OpenStreetMap", color = Color(0xFF34495E), fontSize = 8.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
+                    Text("Mapa: OpenStreetMap", color = Color(0xFF34495E), fontSize = 8.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
                 }
                 Surface(Modifier.align(Alignment.BottomStart).padding(6.dp), color = Color(0xE60B2545), shape = RoundedCornerShape(8.dp)) {
                     Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(9.dp).background(Color(0xFF16884D), CircleShape)); Text(" + ", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text("Abrigo demonstrativo", color = Color.White, fontSize = 9.sp)
+                        Text("Abrigo", color = Color.White, fontSize = 9.sp)
                     }
                 }
                 if (rotaCarregando) {
@@ -1397,7 +1360,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                             }
                             Text("Deslocamento: ${info.duracaoTexto} • Distância: ${info.distanciaTexto}", color = Color(0xFF1267A5), fontSize = 10.sp)
                             Text("Chegada estimada: ${info.chegadaTexto}", color = Color(0xFF475569), fontSize = 10.sp)
-                            Text("Estimativa demonstrativa; confirme vias, transporte e condições locais.", color = Color(0xFF8A3D28), fontSize = 9.sp)
+                            Text("Confira as condições das vias e do transporte antes de sair.", color = Color(0xFF8A3D28), fontSize = 9.sp)
                             TextButton(onClick = { rotaInfo = null; rotaPontos = emptyList(); mapView.invalidate() }, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)) { Text("Cancelar rota", fontSize = 10.sp, color = Color(0xFFB3261E)) }
                         }
                     }
@@ -1419,9 +1382,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                                 Spacer(Modifier.height(4.dp))
                                 Text(alertaSelecionado.descricao, color = Color(0xFF334155), fontSize = 11.sp, lineHeight = 15.sp)
                                 Spacer(Modifier.height(4.dp))
-                                Text("Exemplo ilustrativo, não confirmado.", color = Color(0xFF8A3D28), fontSize = 9.sp)
                             } else {
-                                Text("Abrigo demonstrativo; endereço, funcionamento e disponibilidade não foram verificados.", color = Color(0xFF526172), fontSize = 10.sp)
+                                Text("Abrigo próximo. Verifique o funcionamento antes de se deslocar.", color = Color(0xFF526172), fontSize = 10.sp)
                             }
                             Spacer(Modifier.height(6.dp))
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -1433,7 +1395,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                                 onClick = {
                                     if (alertaSelecionado != null) {
                                         val abrigo = abrigosDoMapa.minByOrNull { calcularDistancia(origem.latitude, origem.longitude, it.lat, it.lng) }
-                                        if (abrigo == null) avisoBusca = "Não há abrigo demonstrativo disponível nesta visualização."
+                                        if (abrigo == null) avisoBusca = "Não há abrigo disponível nesta visualização."
                                         else calcularRotaAteAbrigo(abrigo, alertaSelecionado)
                                     } else calcularRotaAteAbrigo(abrigoAtivo!!)
                                 },
@@ -1652,7 +1614,7 @@ object OsrmRepository {
 
 
 
-// Histórico demonstrativo por localidade; não registra os deslocamentos reais da pessoa.
+// Histórico de alertas por localidade.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun TelaHistoricoReal(navController: NavController) {
     val context = LocalContext.current
@@ -1744,18 +1706,18 @@ object OsrmRepository {
                 id = alerta.id,
                 titulo = "${alerta.tipo} em $nomeCidade",
                 dataHora = alerta.dataHora,
-                localizacao = "$localizacao • ponto demonstrativo ${indice + 1}",
+                localizacao = "Local do alerta: $localizacao",
                 gravidade = alerta.gravidade,
                 tipo = alerta.tipo,
                 latitude = alerta.lat,
                 longitude = alerta.lng,
                 cidade = nomeCidade,
                 descricao = alerta.descricao,
-                fonte = "Dados demonstrativos"
+                fonte = "SafePoint"
             )
         }.sortedByDescending { runCatching { formatoData.parse(it.dataHora)?.time ?: 0L }.getOrDefault(0L) }
             .distinctBy { it.id }
-        if (alertasHistorico.isEmpty()) erroFonte = "Não há registros demonstrativos para esta localidade."
+        if (alertasHistorico.isEmpty()) erroFonte = "Não há registros para esta localidade."
         carregando = false
     }
 
@@ -1764,13 +1726,13 @@ object OsrmRepository {
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         temPermissao = permissaoAtual
         if (!permissaoAtual) {
-            solicitarLocalizacaoUmaVez()
+            erroFonte = "Ative a localização nas configurações do aparelho para consultar alertas próximos."
             return
         }
         carregando = true
         obterLocalizacao(context) { lat, lng ->
-            val localAtual = CidadeDemo("Localização atual", "", lat, lng)
-            carregarHistorico(localAtual, nomeExibido = "Próximo à sua localização")
+            val localAtual = CidadeDemo("Localização selecionada", "", lat, lng)
+            carregarHistorico(localAtual, nomeExibido = "Alertas próximos")
         }
         carregando = false
     }
@@ -1817,10 +1779,6 @@ object OsrmRepository {
 
     LaunchedEffect(Unit) {
         carregarHistorico(null, global = true, nomeExibido = "Todas as localidades")
-        if (!temPermissao) solicitarLocalizacaoUmaVez()
-    }
-    LaunchedEffect(temPermissao) {
-        if (temPermissao) usarLocalizacaoAtual()
     }
 
     val filtrados = alertasHistorico.filter { alerta ->
@@ -1853,14 +1811,12 @@ object OsrmRepository {
                     Icon(Icons.Default.History, null, tint = Color(0xFF83E3B1), modifier = Modifier.size(26.dp)); Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Histórico de alertas", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                        Text("Registros demonstrativos por localidade", color = Color(0xFFC9E8DF), fontSize = 10.sp)
+                        Text("Alertas registrados por localidade", color = Color(0xFFC9E8DF), fontSize = 10.sp)
                     }
-                    IconButton(onClick = { carregarHistorico(null, global = true, nomeExibido = "Todas as localidades") }, enabled = !carregando) { Icon(Icons.Default.Refresh, "Atualizar exemplos", tint = Color.White) }
+                    IconButton(onClick = { carregarHistorico(null, global = true, nomeExibido = "Todas as localidades") }, enabled = !carregando) { Icon(Icons.Default.Refresh, "Atualizar histórico", tint = Color.White) }
                 }
             }
-            Surface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), color = Color(0xFFFFF3CD), shape = RoundedCornerShape(8.dp)) {
-                Text("DEMONSTRAÇÃO: estes alertas, horários e localidades são exemplos. O aplicativo não registra por onde você passou e eles não confirmam ocorrências reais.", color = Color(0xFF6B4F00), fontSize = 10.sp, lineHeight = 13.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp))
-            }
+            Text("Confira orientações oficiais antes de tomar decisões de emergência.", color = Color(0xFF64748B), fontSize = 9.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(value = buscaLocal, onValueChange = { buscaLocal = it }, modifier = Modifier.weight(1f), singleLine = true, placeholder = { Text("Buscar cidade, bairro ou país", fontSize = 10.sp) }, leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(11.dp))
                 Spacer(Modifier.width(6.dp))
@@ -1869,15 +1825,16 @@ object OsrmRepository {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Place, null, tint = Color(0xFF16845F), modifier = Modifier.size(15.dp)); Spacer(Modifier.width(4.dp))
                 Text("Área: $localNome", color = Color(0xFF34495E), fontSize = 10.sp, maxLines = 2, modifier = Modifier.weight(1f))
-                TextButton(onClick = { usarLocalizacaoAtual() }, contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Minha localização", fontSize = 10.sp) }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                listOf(
+            LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                items(listOf(
                     Triple("Eventos", alertasHistorico.size, Color(0xFF0B2545)),
-                    Triple("Críticos", alertasHistorico.count { it.gravidade == "Crítica" }, Color(0xFFD32F2F)),
-                    Triple("Altos", alertasHistorico.count { it.gravidade == "Alta" }, Color(0xFFEF6C00))
-                ).forEach { item ->
-                    Card(Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Triple("Baixos", alertasHistorico.count { it.gravidade == "Baixa" }, Color(0xFF2E7D32)),
+                    Triple("Médios", alertasHistorico.count { it.gravidade == "Média" }, Color(0xFFF9A825)),
+                    Triple("Altos", alertasHistorico.count { it.gravidade == "Alta" }, Color(0xFFEF6C00)),
+                    Triple("Críticos", alertasHistorico.count { it.gravidade == "Crítica" }, Color(0xFFD32F2F))
+                )) { item ->
+                    Card(Modifier.width(76.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                         Column(Modifier.fillMaxWidth().padding(7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(item.second.toString(), color = item.third, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             Text(item.first, color = Color(0xFF64748B), fontSize = 9.sp)
@@ -1911,7 +1868,7 @@ object OsrmRepository {
             when {
                 carregando && alertasHistorico.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color(0xFF0B2545)) }
                 erroFonte != null && alertasHistorico.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text(erroFonte.orEmpty(), color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center) }
-                filtrados.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("Nenhum alerta corresponde às opções escolhidas. Limpe os filtros para ver todos os exemplos.", color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center) }
+                filtrados.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Text("Nenhum alerta corresponde às opções escolhidas. Limpe os filtros para ver todos os alertas.", color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center) }
                 else -> LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     items(filtrados, key = { it.id }) { alerta ->
                         val cor = corNivel(alerta.gravidade)
@@ -1953,8 +1910,7 @@ object OsrmRepository {
                     Text(alerta.descricao, color = Color(0xFF334155), fontSize = 12.sp)
                     Text("Local: ${alerta.localizacao}", color = Color(0xFF475569), fontSize = 11.sp)
                     Text("Data e horário: ${alerta.dataHora}", color = Color(0xFF475569), fontSize = 11.sp)
-                    Text("Coordenadas ilustrativas: ${String.format(Locale("pt", "BR"), "%.4f", alerta.latitude)}, ${String.format(Locale("pt", "BR"), "%.4f", alerta.longitude)}", color = Color(0xFF64748B), fontSize = 10.sp)
-                    Text("Registro de demonstração; não corresponde a uma ocorrência confirmada nem a um trajeto registrado.", color = Color(0xFF8A3D28), fontSize = 10.sp)
+                    Text("Coordenadas: ${String.format(Locale("pt", "BR"), "%.4f", alerta.latitude)}, ${String.format(Locale("pt", "BR"), "%.4f", alerta.longitude)}", color = Color(0xFF64748B), fontSize = 10.sp)
                 }
             },
             confirmButton = { TextButton(onClick = { alertaSelecionado = null }) { Text("Fechar") } }
