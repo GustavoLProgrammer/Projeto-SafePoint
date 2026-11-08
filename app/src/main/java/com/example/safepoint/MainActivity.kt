@@ -129,6 +129,8 @@ object PrefsHelper {
     fun setTermosAceitos(context: Context, aceito: Boolean) { getPrefs(context).edit().putBoolean("termos_aceitos", aceito).apply() }
     fun isLocalizacaoAceita(context: Context): Boolean = getPrefs(context).getBoolean("loc_aceita", false)
     fun setLocalizacaoAceita(context: Context, aceito: Boolean) { getPrefs(context).edit().putBoolean("loc_aceita", aceito).apply() }
+    fun isLocalizacaoDecidida(context: Context): Boolean = getPrefs(context).getBoolean("loc_decidida", false)
+    fun setLocalizacaoDecidida(context: Context, decidida: Boolean) { getPrefs(context).edit().putBoolean("loc_decidida", decidida).apply() }
 }
 
 class MainActivity : ComponentActivity() {
@@ -156,11 +158,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val navController = rememberNavController(); val context = LocalContext.current
-                val termosAceitos = PrefsHelper.isTermosAceitos(context); val locAceita = PrefsHelper.isLocalizacaoAceita(context); val currentUser = auth.currentUser
-                val startDest = when { !termosAceitos -> Screen.Termos.route; !locAceita -> Screen.PermissaoLocalizacao.route; currentUser == null -> Screen.Login.route; else -> Screen.Home.route }
+                val termosAceitos = PrefsHelper.isTermosAceitos(context); val currentUser = auth.currentUser
+                val locDecidida = PrefsHelper.isLocalizacaoDecidida(context)
+                val startDest = when { !termosAceitos -> Screen.Termos.route; !locDecidida -> Screen.PermissaoLocalizacao.route; currentUser == null -> Screen.Login.route; else -> Screen.Home.route }
                 NavHost(navController = navController, startDestination = startDest) {
                     composable(Screen.Termos.route) { TelaTermosUso(onAceitar = { PrefsHelper.setTermosAceitos(context, true); navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } } }) }
-                    composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }, onRecusar = { Toast.makeText(context, "Precisa permitir localização", Toast.LENGTH_LONG).show() }) }
+                    composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }) }
                     composable(Screen.Login.route) { TelaLoginOriginal(navController, auth) }
                     composable(Screen.Cadastro.route) { TelaCadastroEscudoOriginal(navController, auth) }
                     composable(Screen.RecuperarSenha.route) { TelaRecuperarSenhaOriginal(navController, auth) }
@@ -388,8 +391,12 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
 }
 
 @Composable fun TelaPermissaoLocalizacao(onAceitar: () -> Unit, onRecusar: () -> Unit) {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissoes ->
+        val permitida = permissoes[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissoes[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (permitida) onAceitar() else onRecusar()
+    }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(modifier = Modifier.height(24.dp)); Text("Permitir localização?", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Precisamos da sua localização exata para mostrar o mapa real, rotas seguras e abrigos próximos.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center); Spacer(modifier = Modifier.height(32.dp)); Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable { onAceitar() }) { Text("Permitir Localização", color = Color.White, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(12.dp)); TextButton(onClick = onRecusar) { Text("Agora não", color = cinzaTexto) }
+        LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(modifier = Modifier.height(24.dp)); Text("Permitir localização?", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Escolha se o SafePoint poderá usar a localização do aparelho para mostrar o mapa, calcular rotas e encontrar abrigos próximos.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center); Spacer(modifier = Modifier.height(32.dp)); Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Permitir Localização", color = Color.White, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(12.dp)); TextButton(onClick = onRecusar) { Text("Agora não", color = cinzaTexto) }
     }
 }
 
@@ -489,8 +496,7 @@ enum class ModoRota(val titulo: String, val valhallaCosting: String, val fatorTe
 data class DesastreDetalhado(val ocorrencia: Ocorrencia, val alertLevel: String, val gravidade: String, val tipoCode: String, val nomeTipo: String, val fonte: String = "GDACS")
 
 private val TIPOS_ALERTA_DEMONSTRACAO = listOf(
-    "Enchente", "Incêndio", "Tempestade", "Deslizamento",
-    "Seca", "Ciclone", "Terremoto", "Erupção vulcânica"
+    "Enchente", "Incêndio", "Tempestade", "Deslizamento", "Ciclone", "Terremoto"
 )
 private val GRAVIDADES_DEMONSTRACAO = listOf("Baixa", "Média", "Alta", "Crítica")
 private val CORES_TIPOS_ALERTA = mapOf(
@@ -498,11 +504,19 @@ private val CORES_TIPOS_ALERTA = mapOf(
     "Incêndio" to Color(0xFFD32F2F),
     "Tempestade" to Color(0xFF7B1FA2),
     "Deslizamento" to Color(0xFFEF6C00),
-    "Seca" to Color(0xFF8D6E00),
     "Ciclone" to Color(0xFF00838F),
-    "Terremoto" to Color(0xFFC2185B),
-    "Erupção vulcânica" to Color(0xFF455A64)
+    "Terremoto" to Color(0xFFC2185B)
 )
+
+private fun tiposAlertasParaLocal(local: CidadeDemo): List<String> {
+    val nome = SafePointDemoData.normalizar(local.nome)
+    val base = mutableListOf("Enchente", "Incêndio", "Tempestade", "Deslizamento")
+    val areasSismicas = listOf("los angeles", "mexico city", "santiago", "lima", "quito", "tokyo", "seoul", "istanbul", "jakarta", "nairobi")
+    val areasCiclone = listOf("new york", "mexico city", "cairo", "lagos", "mumbai", "bangkok", "jakarta", "sydney", "auckland", "manila")
+    if (areasSismicas.any { nome.contains(it) }) base += "Terremoto"
+    if (areasCiclone.any { nome.contains(it) }) base += "Ciclone"
+    return base
+}
 
 private fun traduzirLocalidadeSafePoint(nome: String): String = when (nome.trim()) {
     "New York" -> "Nova York"
@@ -539,26 +553,26 @@ private fun deslocarCoordenadaDemo(lat: Double, lng: Double, metros: Double, ang
 private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefixo: String, tipoForcadoIndex: Int? = null): List<AlertaDemo> {
     val total = quantidade.coerceAtLeast(1)
     val nomeLocal = traduzirLocalidadeSafePoint(local.nome)
+    val tiposPermitidos = tiposAlertasParaLocal(local)
     val seed = (local.nome.hashCode().toLong() * 31L + (local.lat * 10000).toLong() * 17L + (local.lng * 10000).toLong()).toInt()
     val anguloInicial = Math.floorMod(seed, 360).toDouble() * Math.PI / 180.0
     val agora = System.currentTimeMillis()
     return (0 until total).map { indice ->
-        val tipoIndice = tipoForcadoIndex?.let { Math.floorMod(it + indice, TIPOS_ALERTA_DEMONSTRACAO.size) }
-            ?: Math.floorMod(seed + indice * 3, TIPOS_ALERTA_DEMONSTRACAO.size)
-        val tipo = TIPOS_ALERTA_DEMONSTRACAO[tipoIndice]
+        val tipoIndice = tipoForcadoIndex?.let { Math.floorMod(it + indice, tiposPermitidos.size) }
+            ?: Math.floorMod(seed + indice * 3, tiposPermitidos.size)
+        val tipo = tiposPermitidos[tipoIndice]
         val gravidade = GRAVIDADES_DEMONSTRACAO[Math.floorMod(seed + indice, GRAVIDADES_DEMONSTRACAO.size)]
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 100.0 else 160.0 + (indice % 3) * 50.0
+        val raioMetros = if (total == 1) 350.0 else 1200.0 + indice * 900.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val descricao = when (tipo) {
             "Enchente" -> "Alagamento localizado após chuva intensa na região."
             "Incêndio" -> "Foco de incêndio identificado na região."
             "Tempestade" -> "Tempestade com possibilidade de chuva forte e rajadas."
             "Deslizamento" -> "Instabilidade de encosta registrada na região."
-            "Seca" -> "Período de estiagem na região."
             "Ciclone" -> "Ventos intensos associados a ciclone."
             "Terremoto" -> "Atividade sísmica registrada na região."
-            else -> "Atividade vulcânica registrada na região."
+            else -> "Ocorrência meteorológica registrada na região."
         }
         val horasAtras = Math.floorMod(seed + indice * 37, 24 * 30) + 1
         val dataHora = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date(agora - horasAtras * 60L * 60L * 1000L))
@@ -574,7 +588,7 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     val anguloInicial = Math.floorMod(seed + 45, 360).toDouble() * Math.PI / 180.0
     return (0 until total).map { indice ->
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 300.0 else 520.0 + (indice % 2) * 60.0
+        val raioMetros = if (total == 1) 900.0 else 3500.0 + indice * 2500.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, "Abrigo ${indice + 1}", ponto.first, ponto.second)
     }
@@ -1168,10 +1182,16 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         val canvas = AndroidCanvas(bitmap)
         val cx = tamanho / 2f
         val cor = CORES_TIPOS_ALERTA[tipo] ?: Color(0xFF607D8B)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
-        canvas.drawCircle(cx, cx, tamanho * 0.47f, paint)
-        paint.color = android.graphics.Color.rgb((cor.red * 255).toInt(), (cor.green * 255).toInt(), (cor.blue * 255).toInt())
-        canvas.drawCircle(cx, cx, tamanho * 0.39f, paint)
+        fun gota(raio: Float): AndroidPath = AndroidPath().apply {
+            moveTo(cx, tamanho * 0.94f)
+            cubicTo(cx - raio * 1.35f, tamanho * 0.42f, cx - raio, tamanho * 0.10f, cx, tamanho * 0.10f)
+            cubicTo(cx + raio, tamanho * 0.10f, cx + raio * 1.35f, tamanho * 0.42f, cx, tamanho * 0.94f)
+            close()
+        }
+        val branco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+        canvas.drawPath(gota(tamanho * 0.38f), branco)
+        branco.color = android.graphics.Color.rgb((cor.red * 255).toInt(), (cor.green * 255).toInt(), (cor.blue * 255).toInt())
+        canvas.drawPath(gota(tamanho * 0.30f), branco)
         return BitmapDrawable(context.resources, bitmap)
     }
 
@@ -1180,8 +1200,14 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         val bitmap = Bitmap.createBitmap(tamanho, tamanho, Bitmap.Config.ARGB_8888)
         val canvas = AndroidCanvas(bitmap)
         val cx = tamanho / 2f
+        val gota = AndroidPath().apply {
+            moveTo(cx, tamanho * 0.94f)
+            cubicTo(cx - 22f, tamanho * 0.42f, cx - 17f, 6f, cx, 6f)
+            cubicTo(cx + 17f, 6f, cx + 22f, tamanho * 0.42f, cx, tamanho * 0.94f)
+            close()
+        }
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(30, 136, 77); style = Paint.Style.FILL }
-        canvas.drawCircle(cx, cx, tamanho * 0.45f, paint)
+        canvas.drawPath(gota, paint)
         paint.color = android.graphics.Color.WHITE
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 6f
@@ -1298,7 +1324,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                             title = "${alerta.tipo} • ${alerta.gravidade}"
                             snippet = "${alerta.cidade} • ${alerta.dataHora}"
                             icon = criarIconeAlerta(alerta.tipo)
-                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             setOnMarkerClickListener { _, _ -> selecionado = alerta; abrigoSelecionado = null; true }
                         }
                         view.overlays.add(marker)
@@ -1309,7 +1335,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                             title = abrigo.nome
                             snippet = "Abrigo próximo"
                             icon = criarIconeAbrigo()
-                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             setOnMarkerClickListener { _, _ -> abrigoSelecionado = abrigo; selecionado = null; true }
                         }
                         view.overlays.add(marker)
