@@ -155,6 +155,12 @@ object PrefsHelper {
     fun setFotosDecidida(context: Context, decidida: Boolean) { getPrefs(context).edit().putBoolean("fotos_decidida", decidida).apply() }
     fun isNotificacoesDecidida(context: Context): Boolean = getPrefs(context).getBoolean("notificacoes_decidida", false)
     fun setNotificacoesDecidida(context: Context, decidida: Boolean) { getPrefs(context).edit().putBoolean("notificacoes_decidida", decidida).apply() }
+    fun isReducaoMovimentoAtiva(context: Context): Boolean = getPrefs(context).getBoolean("acess_reduzir_movimento", false)
+    fun setReducaoMovimentoAtiva(context: Context, ativa: Boolean) { getPrefs(context).edit().putBoolean("acess_reduzir_movimento", ativa).apply() }
+    fun isAltoContrasteAtivo(context: Context): Boolean = getPrefs(context).getBoolean("acess_alto_contraste", false)
+    fun setAltoContrasteAtivo(context: Context, ativo: Boolean) { getPrefs(context).edit().putBoolean("acess_alto_contraste", ativo).apply() }
+    fun isCoresDiferenciadasAtiva(context: Context): Boolean = getPrefs(context).getBoolean("acess_cores_diferenciadas", false)
+    fun setCoresDiferenciadasAtiva(context: Context, ativa: Boolean) { getPrefs(context).edit().putBoolean("acess_cores_diferenciadas", ativa).apply() }
 }
 
 private fun comprimirImagemParaFirestore(context: Context, uri: Uri): String? = try {
@@ -223,10 +229,10 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController(); val context = LocalContext.current
                 var acessibilidadeAberta by remember { mutableStateOf(false) }
                 var textoMaior by remember { mutableStateOf(false) }
-                var altoContraste by remember { mutableStateOf(false) }
-                var reduzirMovimento by remember { mutableStateOf(false) }
+                var altoContraste by remember { mutableStateOf(PrefsHelper.isAltoContrasteAtivo(context)) }
+                var reduzirMovimento by remember { mutableStateOf(PrefsHelper.isReducaoMovimentoAtiva(context)) }
                 var leituraFacilitada by remember { mutableStateOf(false) }
-                var coresDiferenciadas by remember { mutableStateOf(false) }
+                var coresDiferenciadas by remember { mutableStateOf(PrefsHelper.isCoresDiferenciadasAtiva(context)) }
                 val termosAceitos = PrefsHelper.isTermosAceitos(context); val currentUser = auth.currentUser
                 val locDecidida = PrefsHelper.isLocalizacaoDecidida(context)
                 val notificacoesDecidida = PrefsHelper.isNotificacoesDecidida(context)
@@ -236,7 +242,7 @@ class MainActivity : ComponentActivity() {
                     LocalDensity provides Density(densidadeAtual.density, if (textoMaior) 1.18f else densidadeAtual.fontScale),
                     LocalTextStyle provides LocalTextStyle.current.copy(letterSpacing = if (leituraFacilitada) 0.6.sp else LocalTextStyle.current.letterSpacing)
                 ) {
-                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFFFFBF0) else Color.Transparent)) {
+                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFFFFBF0) else Color.Transparent).then(if (altoContraste) Modifier.border(3.dp, Color.Yellow) else Modifier)) {
                 NavHost(navController = navController, startDestination = startDest) {
                     composable(Screen.Termos.route) { TelaTermosUso(onAceitar = { PrefsHelper.setTermosAceitos(context, true); navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } } }) }
                     composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }) }
@@ -257,10 +263,10 @@ class MainActivity : ComponentActivity() {
                 if (acessibilidadeAberta) AlertDialog(onDismissRequest = { acessibilidadeAberta = false }, title = { Text("Acessibilidade") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Ajuste a leitura do SafePoint para suas necessidades.")
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Texto maior"); Switch(checked = textoMaior, onCheckedChange = { textoMaior = it }) }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Alto contraste"); Switch(checked = altoContraste, onCheckedChange = { altoContraste = it }) }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Reduzir movimentos"); Switch(checked = reduzirMovimento, onCheckedChange = { reduzirMovimento = it }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Alto contraste"); Switch(checked = altoContraste, onCheckedChange = { altoContraste = it; PrefsHelper.setAltoContrasteAtivo(context, it) }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Reduzir movimentos"); Switch(checked = reduzirMovimento, onCheckedChange = { reduzirMovimento = it; PrefsHelper.setReducaoMovimentoAtiva(context, it) }) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Leitura facilitada"); Switch(checked = leituraFacilitada, onCheckedChange = { leituraFacilitada = it }) }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Cores diferenciadas"); Switch(checked = coresDiferenciadas, onCheckedChange = { coresDiferenciadas = it }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Cores diferenciadas"); Switch(checked = coresDiferenciadas, onCheckedChange = { coresDiferenciadas = it; PrefsHelper.setCoresDiferenciadasAtiva(context, it) }) }
                 } }, confirmButton = { TextButton(onClick = { acessibilidadeAberta = false }) { Text("Fechar") } })
                 }
                 }
@@ -855,7 +861,15 @@ private val CORES_TIPOS_ALERTA = mapOf(
 )
 
 private fun tiposAlertasParaLocal(local: CidadeDemo): List<String> {
-    return TIPOS_ALERTA_DEMONSTRACAO
+    val nome = SafePointDemoData.normalizar(local.nome)
+    val base = mutableListOf("Enchente", "Incêndio", "Tempestade")
+    val zonasDeslizamento = listOf("sao paulo", "rio de janeiro", "belo horizonte", "curitiba", "quito", "lima", "los angeles", "san francisco", "istanbul", "jakarta", "manila", "auckland", "santiago")
+    val zonasCiclone = listOf("miami", "new york", "houston", "new orleans", "mexico city", "havana", "manila", "bangkok", "mumbai", "dhaka", "kolkata", "darwin", "sydney", "maputo", "lagos", "nairobi", "cape town", "auckland")
+    val zonasTerremoto = listOf("los angeles", "san francisco", "mexico city", "santiago", "lima", "quito", "tokyo", "osaka", "seoul", "jakarta", "manila", "istanbul", "athens", "naples", "wellington", "auckland", "reykjavik", "san jose")
+    if (nome in zonasDeslizamento) base += "Deslizamento"
+    if (nome in zonasCiclone) base += "Ciclone"
+    if (nome in zonasTerremoto) base += "Terremoto"
+    return base.distinct()
 }
 
 private fun traduzirLocalidadeSafePoint(nome: String): String = when (nome.trim()) {
@@ -903,7 +917,7 @@ private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
         val tipo = tiposPermitidos[tipoIndice]
         val gravidade = GRAVIDADES_DEMONSTRACAO[Math.floorMod(seed + indice, GRAVIDADES_DEMONSTRACAO.size)]
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 5000.0 else 5000.0 + indice * 5000.0
+        val raioMetros = if (total == 1) 25000.0 else 25000.0 + indice * 25000.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val descricao = when (tipo) {
             "Enchente" -> "Alagamento localizado após chuva intensa na região."
@@ -929,7 +943,7 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     val anguloInicial = Math.floorMod(seed + 210, 360).toDouble() * Math.PI / 180.0
     return (0 until total).map { indice ->
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 22000.0 else 22000.0 + indice * 9000.0
+        val raioMetros = if (total == 1) 90000.0 else 90000.0 + indice * 40000.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val nomesConhecidos = when (SafePointDemoData.normalizar(local.nome)) {
             "sao paulo" -> listOf("Hospital das Clínicas", "Hospital Municipal Dr. Cármino Caricchio", "Escola Estadual São Paulo", "3º Distrito Policial", "Centro Comunitário Sé", "Defesa Civil de São Paulo")
@@ -1359,10 +1373,14 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         }
     }
 
+    fun moverMapa(ponto: GeoPoint) {
+        if (PrefsHelper.isReducaoMovimentoAtiva(context)) mapView.controller.setCenter(ponto) else mapView.controller.animateTo(ponto)
+    }
+
     fun aplicarLocal(local: CidadeDemo, zoom: Double = 13.0, pesquisado: Boolean = true) {
         buscaPersonalizada = pesquisado
         carregarDadosDemonstrativos(local)
-        mapView.controller.animateTo(GeoPoint(local.lat, local.lng))
+        moverMapa(GeoPoint(local.lat, local.lng))
         mapView.controller.setZoom(zoom)
         mapView.invalidate()
     }
@@ -1410,7 +1428,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 buscaPersonalizada = false
                 val localAtual = CidadeDemo("Localização atual", "", lat, lng)
                 carregarDadosDemonstrativos(localAtual)
-                mapView.controller.animateTo(origem)
+                moverMapa(origem)
                 mapView.controller.setZoom(14.0)
                 mapView.invalidate()
             }
@@ -1491,7 +1509,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 val chegada = SimpleDateFormat("HH:mm", Locale("pt", "BR")).format(Date(System.currentTimeMillis() + duracaoSegundos * 1000L))
                 rotaInfo = RotaInfo(km, minutos, duracao, distancia, chegada)
                 avisoBusca = if (alertaEvitar == null) "Rota calculada pelas vias disponíveis." else "Rota traçada para contornar o alerta selecionado."
-                mapView.controller.animateTo(GeoPoint(
+                moverMapa(GeoPoint(
                     (rotaPontos.minOf { it.latitude } + rotaPontos.maxOf { it.latitude }) / 2.0,
                     (rotaPontos.minOf { it.longitude } + rotaPontos.maxOf { it.longitude }) / 2.0
                 ))
@@ -1724,7 +1742,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                     SmallFloatingActionButton(onClick = { mapView.controller.setZoom(mapView.zoomLevelDouble - 1); mapView.invalidate() }, containerColor = Color.White) { Icon(Icons.Default.Remove, "Diminuir zoom", tint = Color(0xFF0B2545)) }
                     SmallFloatingActionButton(onClick = { atualizarPosicaoUsuario(centralizar = true) }, containerColor = Color.White) { Icon(Icons.Default.MyLocation, "Minha localização", tint = Color(0xFF1976D2)) }
                     SmallFloatingActionButton(onClick = {
-                        mapView.controller.animateTo(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng))
+                        moverMapa(GeoPoint(cidadeSelecionada.lat, cidadeSelecionada.lng))
                         mapView.controller.setZoom(if (cidadeSelecionada.nome == "Mundo") 3.5 else if (cidadeSelecionada.nome == "Brasil") 4.5 else 13.0)
                         mapView.invalidate()
                     }, containerColor = Color.White) { Icon(Icons.Default.LocationOn, "Centralizar local pesquisado", tint = Color(0xFF0B2545)) }
