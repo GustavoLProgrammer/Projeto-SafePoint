@@ -11,6 +11,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint
 import android.graphics.Path as AndroidPath
@@ -20,6 +21,7 @@ import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -61,11 +63,15 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -86,7 +92,6 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -102,7 +107,9 @@ import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.text.SimpleDateFormat
+import java.io.ByteArrayOutputStream
 import java.util.*
+import android.util.Base64
 
 // CORES ORIGINAIS
 val azulEscuro = Color(0xFF0F3E8A)
@@ -142,6 +149,30 @@ object PrefsHelper {
     fun setLocalizacaoAceita(context: Context, aceito: Boolean) { getPrefs(context).edit().putBoolean("loc_aceita", aceito).apply() }
     fun isLocalizacaoDecidida(context: Context): Boolean = getPrefs(context).getBoolean("loc_decidida", false)
     fun setLocalizacaoDecidida(context: Context, decidida: Boolean) { getPrefs(context).edit().putBoolean("loc_decidida", decidida).apply() }
+    fun isFotosDecidida(context: Context): Boolean = getPrefs(context).getBoolean("fotos_decidida", false)
+    fun setFotosDecidida(context: Context, decidida: Boolean) { getPrefs(context).edit().putBoolean("fotos_decidida", decidida).apply() }
+}
+
+private fun comprimirImagemParaFirestore(context: Context, uri: Uri): String? = try {
+    val original = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) } ?: return null
+    val maiorLado = maxOf(original.width, original.height).coerceAtLeast(1)
+    val escala = minOf(1.0f, 560.0f / maiorLado.toFloat())
+    val bitmap = if (escala < 1f) Bitmap.createScaledBitmap(original, (original.width * escala).toInt().coerceAtLeast(1), (original.height * escala).toInt().coerceAtLeast(1), true) else original
+    val saida = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.JPEG, 52, saida)
+    if (saida.size() > 700_000) {
+        saida.reset()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 35, saida)
+    }
+    if (bitmap !== original) bitmap.recycle()
+    original.recycle()
+    "data:image/jpeg;base64," + Base64.encodeToString(saida.toByteArray(), Base64.NO_WRAP)
+} catch (_: Exception) { null }
+
+private fun abrirConfiguracoesNotificacoes(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply { putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+    } else context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
 }
 
 class MainActivity : ComponentActivity() {
@@ -170,9 +201,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val navController = rememberNavController(); val context = LocalContext.current
+                var acessibilidadeAberta by remember { mutableStateOf(false) }
+                var textoMaior by remember { mutableStateOf(false) }
+                var altoContraste by remember { mutableStateOf(false) }
                 val termosAceitos = PrefsHelper.isTermosAceitos(context); val currentUser = auth.currentUser
                 val locDecidida = PrefsHelper.isLocalizacaoDecidida(context)
                 val startDest = when { !termosAceitos -> Screen.Termos.route; !locDecidida -> Screen.PermissaoLocalizacao.route; currentUser == null -> Screen.Login.route; else -> Screen.Home.route }
+                val densidadeAtual = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(densidadeAtual.density, if (textoMaior) 1.18f else densidadeAtual.fontScale)) {
+                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else Color.Transparent)) {
                 NavHost(navController = navController, startDestination = startDest) {
                     composable(Screen.Termos.route) { TelaTermosUso(onAceitar = { PrefsHelper.setTermosAceitos(context, true); navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } } }) }
                     composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }) }
@@ -187,6 +224,14 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Ajuda.route) { TelaAjudaComoUsar(onVoltar = { navController.popBackStack() }) }
                     composable(Screen.Contribuir.route) { TelaContribuir(navController, auth) }
                     composable(Screen.Alertas.route) { TelaAlertas(navController) }
+                }
+                SmallFloatingActionButton(onClick = { acessibilidadeAberta = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 76.dp).semantics { contentDescription = "Abrir opções de acessibilidade" }, containerColor = if (altoContraste) Color.Yellow else azulEscuro) { Icon(Icons.Default.Accessibility, "Acessibilidade", tint = if (altoContraste) Color.Black else Color.White) }
+                if (acessibilidadeAberta) AlertDialog(onDismissRequest = { acessibilidadeAberta = false }, title = { Text("Acessibilidade") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Ajuste a leitura do SafePoint para suas necessidades.")
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Texto maior"); Switch(checked = textoMaior, onCheckedChange = { textoMaior = it }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Alto contraste"); Switch(checked = altoContraste, onCheckedChange = { altoContraste = it }) }
+                } }, confirmButton = { TextButton(onClick = { acessibilidadeAberta = false }) { Text("Fechar") } })
+                }
                 }
             }
         }
@@ -405,14 +450,14 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
 }
 
 @Composable fun TelaPermissaoLocalizacao(onAceitar: () -> Unit, onRecusar: () -> Unit) {
-    var localizacaoAceita by remember { mutableStateOf(false) }
-    val notificacaoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (localizacaoAceita) onAceitar() else onRecusar() }
+    val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissoes ->
-        localizacaoAceita = permissoes[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissoes[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (Build.VERSION.SDK_INT >= 33) notificacaoLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else if (localizacaoAceita) onAceitar() else onRecusar()
+        val aceitou = permissoes[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissoes[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (aceitou) abrirConfiguracoesNotificacoes(context)
+        onAceitar()
     }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(modifier = Modifier.height(24.dp)); Text("Permissões do SafePoint", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Permita a localização para usar o mapa e receber avisos próximos. Em seguida, o Android perguntará se o SafePoint pode enviar notificações na tela do celular.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center); Spacer(modifier = Modifier.height(32.dp)); Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Permitir e continuar", color = Color.White, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(12.dp)); TextButton(onClick = { localizacaoAceita = false; if (Build.VERSION.SDK_INT >= 33) notificacaoLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else onRecusar() }) { Text("Agora não", color = cinzaTexto) }
+        LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(modifier = Modifier.height(24.dp)); Text("Permissão de localização", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Permita a localização para usar o mapa e receber alertas próximos. Depois, você poderá ativar as notificações separadamente nas configurações do celular.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center); Spacer(modifier = Modifier.height(32.dp)); Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Permitir localização", color = Color.White, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(12.dp)); TextButton(onClick = onRecusar) { Text("Agora não", color = cinzaTexto) }
     }
 }
 
@@ -575,7 +620,6 @@ private fun enviarNotificacaoSafePoint(context: Context, titulo: String, texto: 
 fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
     val context = LocalContext.current
     val db = remember { FirebaseFirestore.getInstance() }
-    val storage = remember { FirebaseStorage.getInstance() }
     val usuario = auth.currentUser
     val moderador = usuario?.email.equals(EMAIL_MODERADOR_SAFEPOINT, ignoreCase = true)
     var aba by remember { mutableStateOf(0) }
@@ -598,6 +642,15 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
         onDispose { listener.remove() }
     }
     val fotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> fotoUri = uri }
+    val fotoPermissao = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+    val fotoPermissaoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { concedida ->
+        PrefsHelper.setFotosDecidida(context, true)
+        if (concedida) fotoPicker.launch("image/*") else mensagem = "Permissão de fotos recusada. Ative o acesso nas configurações do celular para anexar uma imagem."
+    }
+    fun escolherFotoRelato() {
+        if (PrefsHelper.isFotosDecidida(context)) fotoPicker.launch("image/*")
+        else fotoPermissaoLauncher.launch(fotoPermissao)
+    }
     fun concluirEnvio(dados: HashMap<String, Any>, tipoEnviado: String, localEnviado: String, descricaoEnviada: String) {
         db.collection("relatos_comunidade").add(dados).addOnSuccessListener {
             db.collection("mail").add(mapOf("to" to listOf(EMAIL_MODERADOR_SAFEPOINT), "message" to mapOf("subject" to "Novo relato aguardando aprovação no SafePoint", "html" to "<h2>Novo relato comunitário</h2><p><b>Tipo:</b> $tipoEnviado</p><p><b>Gravidade:</b> ${dados["gravidade"]}</p><p><b>Local:</b> $localEnviado</p><p>$descricaoEnviada</p><p>Abra o SafePoint para aprovar ou negar.</p>")))
@@ -607,11 +660,12 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
     fun enviarRelato(tipoEnviado: String, gravidadeEnviada: String, localEnviado: String, descricaoEnviada: String) {
         val dados = hashMapOf<String, Any>("tipo" to tipoEnviado, "gravidade" to gravidadeEnviada, "local" to localEnviado, "descricao" to descricaoEnviada, "dataHora" to SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date()), "status" to "EM_ANALISE", "autorUid" to (usuario?.uid ?: ""), "autorEmail" to (usuario?.email ?: ""), "criadoEm" to com.google.firebase.firestore.FieldValue.serverTimestamp())
         val uri = fotoUri
-        if (uri == null) concluirEnvio(dados, tipoEnviado, localEnviado, descricaoEnviada)
-        else {
-            val referencia = storage.reference.child("relatos/${usuario?.uid ?: "anonimo"}/${UUID.randomUUID()}.jpg")
-            referencia.putFile(uri).continueWithTask { referencia.downloadUrl }.addOnSuccessListener { url -> dados["fotoUrl"] = url.toString(); concluirEnvio(dados, tipoEnviado, localEnviado, descricaoEnviada) }.addOnFailureListener { erro -> mensagem = "Não foi possível enviar a foto: ${erro.localizedMessage ?: "erro do armazenamento"}" }
+        if (uri != null) {
+            val fotoBase64 = comprimirImagemParaFirestore(context, uri)
+            if (fotoBase64 == null) { mensagem = "Não foi possível ler ou comprimir a foto."; return }
+            dados["fotoUrl"] = fotoBase64
         }
+        concluirEnvio(dados, tipoEnviado, localEnviado, descricaoEnviada)
     }
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }, containerColor = Color(0xFFF4F7FA)) { padding ->
@@ -636,7 +690,7 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
                     OutlinedTextField(value = local, onValueChange = { local = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Local do ocorrido") }, placeholder = { Text("Cidade, bairro ou ponto de referência") }, singleLine = true, leadingIcon = { Icon(Icons.Default.Place, null) })
                     OutlinedTextField(value = descricao, onValueChange = { descricao = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 130.dp), label = { Text("O que aconteceu?") }, placeholder = { Text("Descreva os sinais observados e quando ocorreu") }, minLines = 5)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { fotoPicker.launch("image/*") }) { Icon(Icons.Default.AddAPhoto, null); Spacer(Modifier.width(5.dp)); Text(if (fotoUri == null) "Adicionar foto" else "Trocar foto", fontSize = 11.sp) }
+                        OutlinedButton(onClick = { escolherFotoRelato() }) { Icon(Icons.Default.AddAPhoto, null); Spacer(Modifier.width(5.dp)); Text(if (fotoUri == null) "Adicionar foto" else "Trocar foto", fontSize = 11.sp) }
                         if (fotoUri != null) { AsyncImage(model = fotoUri, contentDescription = "Foto selecionada", modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop); Text("Foto anexada", fontSize = 10.sp, color = Color(0xFF2E7D32)) }
                     }
                     Button(onClick = {
@@ -745,13 +799,7 @@ private val CORES_TIPOS_ALERTA = mapOf(
 )
 
 private fun tiposAlertasParaLocal(local: CidadeDemo): List<String> {
-    val nome = SafePointDemoData.normalizar(local.nome)
-    val base = mutableListOf("Enchente", "Incêndio", "Tempestade", "Deslizamento")
-    val areasSismicas = listOf("los angeles", "mexico city", "santiago", "lima", "quito", "tokyo", "seoul", "istanbul", "jakarta", "nairobi")
-    val areasCiclone = listOf("new york", "mexico city", "cairo", "lagos", "mumbai", "bangkok", "jakarta", "sydney", "auckland", "manila")
-    if (areasSismicas.any { nome.contains(it) }) base += "Terremoto"
-    if (areasCiclone.any { nome.contains(it) }) base += "Ciclone"
-    return base
+    return TIPOS_ALERTA_DEMONSTRACAO
 }
 
 private fun traduzirLocalidadeSafePoint(nome: String): String = when (nome.trim()) {
@@ -799,7 +847,7 @@ private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
         val tipo = tiposPermitidos[tipoIndice]
         val gravidade = GRAVIDADES_DEMONSTRACAO[Math.floorMod(seed + indice, GRAVIDADES_DEMONSTRACAO.size)]
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 900.0 else 1800.0 + indice * 1400.0
+        val raioMetros = if (total == 1) 2500.0 else 2500.0 + indice * 2200.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val descricao = when (tipo) {
             "Enchente" -> "Alagamento localizado após chuva intensa na região."
@@ -825,15 +873,15 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     val anguloInicial = Math.floorMod(seed + 210, 360).toDouble() * Math.PI / 180.0
     return (0 until total).map { indice ->
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 6500.0 else 6500.0 + indice * 4200.0
+        val raioMetros = if (total == 1) 12000.0 else 12000.0 + indice * 6500.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val nomesConhecidos = when (SafePointDemoData.normalizar(local.nome)) {
-            "sao paulo" -> listOf("Hospital das Clínicas", "Hospital Municipal Dr. Cármino Caricchio", "Escola Estadual São Paulo", "3º Distrito Policial")
-            "rio de janeiro" -> listOf("Hospital Municipal Souza Aguiar", "Hospital Municipal Miguel Couto", "Escola Municipal do Rio", "17ª Delegacia de Polícia")
-            "brasilia" -> listOf("Hospital de Base do Distrito Federal", "Hospital Regional da Asa Norte", "Escola Classe de Brasília", "Delegacia da área")
-            "london" -> listOf("Hospital St Thomas", "University College Hospital", "Escola pública de Londres", "Delegacia da Metropolitan Police")
-            "new york" -> listOf("Bellevue Hospital", "NewYork-Presbyterian Hospital", "Escola pública de Nova York", "Delegacia do NYPD")
-            else -> listOf("Hospital público de $nomeLocal", "Escola pública de $nomeLocal", "Delegacia local de $nomeLocal", "Corpo de Bombeiros de $nomeLocal")
+            "sao paulo" -> listOf("Hospital das Clínicas", "Hospital Municipal Dr. Cármino Caricchio", "Escola Estadual São Paulo", "3º Distrito Policial", "Centro Comunitário Sé", "Defesa Civil de São Paulo")
+            "rio de janeiro" -> listOf("Hospital Municipal Souza Aguiar", "Hospital Municipal Miguel Couto", "Escola Municipal do Rio", "17ª Delegacia de Polícia", "Centro Comunitário Carioca", "Defesa Civil do Rio")
+            "brasilia" -> listOf("Hospital de Base do Distrito Federal", "Hospital Regional da Asa Norte", "Escola Classe de Brasília", "Delegacia da área", "Centro Comunitário de Brasília", "Defesa Civil do Distrito Federal")
+            "london" -> listOf("Hospital St Thomas", "University College Hospital", "Escola pública de Londres", "Delegacia da Metropolitan Police", "Centro Comunitário de Londres", "Defesa Civil de Londres")
+            "new york" -> listOf("Bellevue Hospital", "NewYork-Presbyterian Hospital", "Escola pública de Nova York", "Delegacia do NYPD", "Centro Comunitário de Nova York", "Defesa Civil de Nova York")
+            else -> listOf("Hospital público de $nomeLocal", "Escola municipal de $nomeLocal", "Delegacia local de $nomeLocal", "Corpo de Bombeiros de $nomeLocal", "Centro Comunitário de $nomeLocal", "Defesa Civil de $nomeLocal")
         }
         AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, nomesConhecidos[indice % nomesConhecidos.size], ponto.first, ponto.second)
     }
@@ -1235,7 +1283,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             }
             else -> {
                 alertas = criarAlertasDemonstrativos(local, 8, "mapa-local").distinctBy { it.id }
-                abrigos = criarAbrigosDemonstrativos(local, 4, "abrigo-local").distinctBy { it.id }
+                abrigos = criarAbrigosDemonstrativos(local, 6, "abrigo-local").distinctBy { it.id }
             }
         }
         alertasDoLocal = alertas
@@ -1450,6 +1498,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         branco.color = android.graphics.Color.rgb((cor.red * 255).toInt(), (cor.green * 255).toInt(), (cor.blue * 255).toInt())
         branco.clearShadowLayer()
         canvas.drawPath(gota(tamanho * 0.30f), branco)
+        branco.color = android.graphics.Color.WHITE
+        canvas.drawCircle(cx, tamanho * 0.40f, 5.5f, branco)
         return BitmapDrawable(context.resources, bitmap)
     }
 
@@ -1472,6 +1522,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         paint.strokeCap = Paint.Cap.ROUND
         canvas.drawLine(cx - 10f, cx, cx + 10f, cx, paint)
         canvas.drawLine(cx, cx - 10f, cx, cx + 10f, paint)
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(cx, cx, 3.5f, paint)
         return BitmapDrawable(context.resources, bitmap)
     }
 
@@ -2322,7 +2374,13 @@ fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> U
 @Composable fun TelaPerfil(navController: NavController, auth: FirebaseAuth, db: FirebaseFirestore) {
     val context = LocalContext.current; var nome by remember { mutableStateOf("") }; var email by remember { mutableStateOf("") }; var telefone by remember { mutableStateOf("") }; var dataNascimento by remember { mutableStateOf("") }; var fotoUriLocal by remember { mutableStateOf<Uri?>(null) }; var fotoUrlSalva by remember { mutableStateOf<String?>(null) }; var mostrarDatePicker by remember { mutableStateOf(false) }; var salvando by remember { mutableStateOf(false) }; var carregando by remember { mutableStateOf(true) }
     val imagePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri: Uri? -> uri?.let { fotoUriLocal = it } }
-    LaunchedEffect(Unit) { val userId = PrefsHelper.getUserId(context) ?: auth.currentUser?.uid; if (userId != null) db.collection("usuarios").document(userId).get().addOnSuccessListener { doc -> nome = doc.getString("nome") ?: ""; email = doc.getString("email") ?: auth.currentUser?.email ?: ""; telefone = doc.getString("telefone") ?: ""; dataNascimento = doc.getString("dataNascimento") ?: ""; fotoUrlSalva = doc.getString("fotoUrl"); carregando = false }.addOnFailureListener { carregando = false } else carregando = false }
+    val fotoPermissao = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+    val fotoPermissaoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { concedida ->
+        PrefsHelper.setFotosDecidida(context, true)
+        if (concedida) imagePickerLauncher.launch("image/*") else Toast.makeText(context, "Permissão de fotos recusada. Ative o acesso nas configurações para escolher uma imagem.", Toast.LENGTH_LONG).show()
+    }
+    fun escolherFotoPerfil() { if (PrefsHelper.isFotosDecidida(context)) imagePickerLauncher.launch("image/*") else fotoPermissaoLauncher.launch(fotoPermissao) }
+    LaunchedEffect(Unit) { val userId = auth.currentUser?.uid ?: PrefsHelper.getUserId(context); if (userId != null) db.collection("usuarios").document(userId).get().addOnSuccessListener { doc -> nome = doc.getString("nome") ?: ""; email = doc.getString("email") ?: auth.currentUser?.email ?: ""; telefone = doc.getString("telefone") ?: ""; dataNascimento = doc.getString("dataNascimento") ?: ""; fotoUrlSalva = doc.getString("fotoUrl"); carregando = false }.addOnFailureListener { carregando = false } else carregando = false }
     if (mostrarDatePicker) { val datePickerState = rememberDatePickerState(); DatePickerDialog(onDismissRequest = { mostrarDatePicker = false }, confirmButton = { TextButton(onClick = { val millis = datePickerState.selectedDateMillis; if (millis != null) { val cal = Calendar.getInstance(); cal.timeInMillis = millis; dataNascimento = String.format("%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)) }; mostrarDatePicker = false }) { Text("OK") } }, dismissButton = { TextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") } }) { DatePicker(state = datePickerState) } }
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
         if (carregando) Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = azulEscuro) }
@@ -2330,7 +2388,7 @@ fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> U
             Column(modifier = Modifier.fillMaxSize().padding(paddingValues).background(Color.White).verticalScroll(rememberScrollState())) {
                 Box(modifier = Modifier.fillMaxWidth().background(FundoGradiente).statusBarsPadding().padding(24.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 12.dp)) {
-                        Box(modifier = Modifier.size(120.dp).clip(CircleShape).background(Color.White).clickable { imagePickerLauncher.launch("image/*") }, contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.size(120.dp).clip(CircleShape).background(Color.White).clickable { escolherFotoPerfil() }, contentAlignment = Alignment.Center) {
                             val img = fotoUriLocal?.toString() ?: fotoUrlSalva; if (!img.isNullOrBlank()) AsyncImage(model = img, contentDescription = "Foto", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop) else Icon(Icons.Default.Person, null, tint = azulEscuro, modifier = Modifier.size(70.dp))
                             Box(modifier = Modifier.align(Alignment.BottomEnd).size(36.dp).clip(CircleShape).background(azulLinhas), contentAlignment = Alignment.Center) { Icon(Icons.Default.PhotoCamera, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
                         }
@@ -2344,17 +2402,15 @@ fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> U
                     OutlinedTextField(value = telefone, onValueChange = { telefone = it }, label = { Text("Telefone") }, leadingIcon = { Icon(Icons.Outlined.Phone, null, tint = azulEscuro) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
                     OutlinedTextField(value = dataNascimento, onValueChange = {}, label = { Text("Data de nascimento") }, leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null, tint = azulEscuro) }, trailingIcon = { IconButton(onClick = { mostrarDatePicker = true }) { Icon(Icons.Default.ArrowDropDown, null) } }, modifier = Modifier.fillMaxWidth().clickable { mostrarDatePicker = true }, shape = RoundedCornerShape(12.dp), singleLine = true, readOnly = true)
                     BotaoGradiente(texto = if (salvando) "Salvando..." else "Salvar Alterações") {
-                        if (salvando) return@BotaoGradiente; salvando = true; val userId = PrefsHelper.getUserId(context) ?: auth.currentUser?.uid
+                        if (salvando) return@BotaoGradiente; salvando = true; val userId = auth.currentUser?.uid ?: PrefsHelper.getUserId(context)
                         if (userId != null) {
                             val perfilMap = hashMapOf<String, Any>("nome" to nome, "email" to email, "telefone" to telefone, "dataNascimento" to dataNascimento)
                             db.collection("usuarios").document(userId).set(perfilMap, SetOptions.merge()).addOnSuccessListener {
                                 if (fotoUriLocal != null) {
                                     try {
-                                        val storage = FirebaseStorage.getInstance(); val storageRef = storage.reference.child("fotos_perfil/$userId/profile.jpg")
-                                        storageRef.putFile(fotoUriLocal!!).continueWithTask { task -> if (!task.isSuccessful) throw task.exception!!; storageRef.downloadUrl }.addOnCompleteListener { task ->
-                                            if (task.isSuccessful) { val url = task.result.toString(); db.collection("usuarios").document(userId).set(mapOf("fotoUrl" to url), SetOptions.merge()).addOnSuccessListener { fotoUrlSalva = url; fotoUriLocal = null; Toast.makeText(context, "Perfil e foto atualizados!", Toast.LENGTH_SHORT).show(); salvando = false }.addOnFailureListener { Toast.makeText(context, "Foto enviada mas erro ao salvar URL.", Toast.LENGTH_LONG).show(); salvando = false } }
-                                            else { Toast.makeText(context, "Storage não configurado. Salvando só dados de texto.", Toast.LENGTH_LONG).show(); salvando = false }
-                                        }
+                                        val fotoBase64 = comprimirImagemParaFirestore(context, fotoUriLocal!!)
+                                        if (fotoBase64 == null) { Toast.makeText(context, "Não foi possível ler ou comprimir a foto.", Toast.LENGTH_LONG).show(); salvando = false }
+                                        else db.collection("usuarios").document(userId).set(mapOf("fotoUrl" to fotoBase64), SetOptions.merge()).addOnSuccessListener { fotoUrlSalva = fotoBase64; fotoUriLocal = null; Toast.makeText(context, "Perfil e foto atualizados!", Toast.LENGTH_SHORT).show(); salvando = false }.addOnFailureListener { Toast.makeText(context, "Erro ao salvar a foto no Firestore: ${it.localizedMessage}", Toast.LENGTH_LONG).show(); salvando = false }
                                     } catch (e: Exception) { Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_LONG).show(); salvando = false }
                                 } else { Toast.makeText(context, "Dados salvos com sucesso!", Toast.LENGTH_SHORT).show(); salvando = false }
                             }.addOnFailureListener { e -> Toast.makeText(context, "Erro ao salvar: ${e.message}", Toast.LENGTH_LONG).show(); salvando = false }
