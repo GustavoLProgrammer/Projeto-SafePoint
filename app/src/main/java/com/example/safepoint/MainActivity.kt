@@ -52,9 +52,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -241,7 +243,7 @@ class MainActivity : ComponentActivity() {
                 var coresDiferenciadas by remember { mutableStateOf(PrefsHelper.isCoresDiferenciadasAtiva(context)) }
                 val esquemaAcessivel = when {
                     altoContraste -> darkColorScheme(background = Color.Black, surface = Color.Black, onBackground = Color.White, onSurface = Color.White, primary = Color.Yellow, onPrimary = Color.Black, secondary = Color.White, onSecondary = Color.Black)
-                    coresDiferenciadas -> lightColorScheme(primary = Color(0xFF5B2C83), onPrimary = Color.White, secondary = Color(0xFF007C91), onSecondary = Color.White, background = Color(0xFFF4EEFF), surface = Color.White, onBackground = Color(0xFF241B35), onSurface = Color(0xFF241B35))
+                    coresDiferenciadas -> lightColorScheme(primary = Color(0xFFD500F9), onPrimary = Color.White, secondary = Color(0xFF00B8D4), onSecondary = Color.Black, tertiary = Color(0xFFFF6D00), background = Color(0xFFFFD6F6), surface = Color(0xFFFFF0FB), onBackground = Color(0xFF31003D), onSurface = Color(0xFF31003D))
                     else -> lightColorScheme()
                 }
             MaterialTheme(colorScheme = esquemaAcessivel) {
@@ -258,7 +260,11 @@ class MainActivity : ComponentActivity() {
                         fontWeight = if (leituraFacilitada) FontWeight.Medium else LocalTextStyle.current.fontWeight
                     )
                 ) {
-                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFF4EEFF) else Color.Transparent)) {
+                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFFFD6F6) else Color.Transparent).drawWithContent {
+                    drawContent()
+                    if (altoContraste) drawRect(Color.Black.copy(alpha = 0.24f), blendMode = BlendMode.Multiply)
+                    if (coresDiferenciadas) drawRect(Color(0xFFE91E63).copy(alpha = 0.18f), blendMode = BlendMode.Color)
+                }) {
                 NavHost(navController = navController, startDestination = startDest) {
                     composable(Screen.Termos.route) { TelaTermosUso(onAceitar = { PrefsHelper.setTermosAceitos(context, true); navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } } }) }
                     composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }) }
@@ -890,6 +896,7 @@ private val CORES_TIPOS_ALERTA = mapOf(
 
 private fun tiposAlertasParaLocal(local: CidadeDemo): List<String> {
     val nome = SafePointDemoData.normalizar(local.nome)
+    if (nome == "localizacao atual" || nome == "localização atual") return listOf("Incêndio", "Tempestade")
     val base = mutableListOf("Enchente", "Incêndio", "Tempestade")
     val zonasDeslizamento = listOf("sao paulo", "rio de janeiro", "belo horizonte", "curitiba", "quito", "lima", "los angeles", "san francisco", "istanbul", "jakarta", "manila", "auckland", "santiago")
     val zonasCiclone = listOf("miami", "new york", "houston", "new orleans", "mexico city", "havana", "manila", "bangkok", "mumbai", "dhaka", "kolkata", "darwin", "sydney", "maputo", "lagos", "nairobi", "cape town", "auckland")
@@ -933,11 +940,11 @@ private fun deslocarCoordenadaDemo(lat: Double, lng: Double, metros: Double, ang
 
 /** Conjunto de alertas organizados por localidade. */
 private fun direcoesTerrestres(local: CidadeDemo): List<Double> = when (SafePointDemoData.normalizar(local.nome)) {
-    "rio de janeiro" -> listOf(315.0, 270.0, 0.0, 45.0, 225.0)
-    "santos" -> listOf(0.0, 270.0, 315.0, 45.0, 225.0)
-    "new york" -> listOf(315.0, 270.0, 0.0, 225.0, 45.0)
+    "rio de janeiro" -> listOf(315.0, 270.0, 0.0, 225.0, 180.0)
+    "santos" -> listOf(0.0, 315.0, 270.0, 225.0, 180.0)
+    "new york" -> listOf(315.0, 270.0, 0.0, 225.0, 180.0)
     "london" -> listOf(45.0, 90.0, 0.0, 315.0, 270.0)
-    "mumbai" -> listOf(90.0, 45.0, 0.0, 315.0, 270.0)
+    "mumbai" -> listOf(90.0, 45.0, 0.0, 315.0, 360.0)
     "tokyo" -> listOf(270.0, 315.0, 0.0, 225.0, 45.0)
     "singapore" -> listOf(0.0, 315.0, 45.0, 270.0, 225.0)
     "jakarta" -> listOf(0.0, 315.0, 270.0, 45.0, 225.0)
@@ -953,7 +960,7 @@ private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     val agora = System.currentTimeMillis()
     return (0 until total).map { indice ->
         val tipoIndice = tipoForcadoIndex?.let { Math.floorMod(it + indice, tiposPermitidos.size) }
-            ?: Math.floorMod(seed + indice * 3, tiposPermitidos.size)
+            ?: Math.floorMod(seed + indice, tiposPermitidos.size)
         val tipo = tiposPermitidos[tipoIndice]
         val gravidade = GRAVIDADES_DEMONSTRACAO[Math.floorMod(seed + indice, GRAVIDADES_DEMONSTRACAO.size)]
         val angulo = direcoes[Math.floorMod(indice + seed, direcoes.size)] * Math.PI / 180.0
@@ -1374,6 +1381,10 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         return (cidadesBrasilDemo() + localidadesInternacionais).distinctBy { "${it.nome}|${it.uf}" }
     }
 
+    fun quantidadeAbrigosPorCidade(cidade: CidadeDemo, minimo: Int = 1, maximo: Int = 3): Int {
+        return minimo + Math.floorMod(cidade.nome.hashCode() + (cidade.lat * 10).toInt(), maximo - minimo + 1)
+    }
+
     fun carregarDadosDemonstrativos(local: CidadeDemo) {
         cidadeSelecionada = local
         selecionado = null
@@ -1386,16 +1397,16 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             "mundo", "global", "world" -> {
                 val cidades = cidadesMundoDemo()
                 alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 1, "mapa-global", indice) }.distinctBy { it.id }
-                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 3, "abrigo-global") }.distinctBy { it.id }
+                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, quantidadeAbrigosPorCidade(it), "abrigo-global") }.distinctBy { it.id }
             }
             "brasil", "brazil" -> {
                 val cidades = cidadesBrasilDemo()
                 alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 1, "mapa-brasil", indice) }.distinctBy { it.id }
-                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 3, "abrigo-brasil") }.distinctBy { it.id }
+                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, quantidadeAbrigosPorCidade(it), "abrigo-brasil") }.distinctBy { it.id }
             }
             else -> {
-                alertas = criarAlertasDemonstrativos(local, 8, "mapa-local").distinctBy { it.id }
-                abrigos = criarAbrigosDemonstrativos(local, 4, "abrigo-local").distinctBy { it.id }
+                alertas = criarAlertasDemonstrativos(local, 2, "mapa-local").distinctBy { it.id }
+                abrigos = criarAbrigosDemonstrativos(local, quantidadeAbrigosPorCidade(local, 2, 4), "abrigo-local").distinctBy { it.id }
             }
         }
         alertasDoLocal = alertas
@@ -1621,26 +1632,26 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     }
 
     fun criarIconeAbrigo(): android.graphics.drawable.Drawable {
-        val tamanho = 56
+        val tamanho = 44
         val bitmap = Bitmap.createBitmap(tamanho, tamanho, Bitmap.Config.ARGB_8888)
         val canvas = AndroidCanvas(bitmap)
         val cx = tamanho / 2f
         val gota = AndroidPath().apply {
             moveTo(cx, tamanho * 0.94f)
-            cubicTo(cx - 22f, tamanho * 0.42f, cx - 17f, 6f, cx, 6f)
-            cubicTo(cx + 17f, 6f, cx + 22f, tamanho * 0.42f, cx, tamanho * 0.94f)
+            cubicTo(cx - 17f, tamanho * 0.42f, cx - 13f, 5f, cx, 5f)
+            cubicTo(cx + 13f, 5f, cx + 17f, tamanho * 0.42f, cx, tamanho * 0.94f)
             close()
         }
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(30, 136, 77); style = Paint.Style.FILL; setShadowLayer(4f, 0f, 2f, android.graphics.Color.argb(160, 0, 0, 0)) }
         canvas.drawPath(gota, paint)
         paint.color = android.graphics.Color.WHITE
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 4f
+        paint.strokeWidth = 3f
         paint.strokeCap = Paint.Cap.ROUND
-        canvas.drawLine(cx - 7f, cx, cx + 7f, cx, paint)
-        canvas.drawLine(cx, cx - 7f, cx, cx + 7f, paint)
+        canvas.drawLine(cx - 5f, cx, cx + 5f, cx, paint)
+        canvas.drawLine(cx, cx - 5f, cx, cx + 5f, paint)
         paint.style = Paint.Style.FILL
-        canvas.drawCircle(cx, cx, 3.5f, paint)
+        canvas.drawCircle(cx, cx, 2.5f, paint)
         return BitmapDrawable(context.resources, bitmap)
     }
 
