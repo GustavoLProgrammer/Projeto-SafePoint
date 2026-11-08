@@ -1,6 +1,9 @@
 package com.example.safepoint
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -14,6 +17,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -64,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -114,12 +120,15 @@ val gradientFundoOriginal = Brush.linearGradient(colors = listOf(Color(0xFF072B6
 val gradientBotaoOriginal = Brush.horizontalGradient(colors = listOf(azulEscuro, verdeGradiente))
 val BotaoGradiente = gradientBotaoOriginal
 
-data class AlertaRota(val id: String, val titulo: String, val dataHora: String, val localizacao: String, val gravidade: String, val tipo: String, val latitude: Double, val longitude: Double, val distancia: Double = 0.0, val bairro: String = "", val cidade: String = "", val regiao: String = "", val descricao: String = "", val fonte: String = "GDACS")
+data class AlertaRota(val id: String, val titulo: String, val dataHora: String, val localizacao: String, val gravidade: String, val tipo: String, val latitude: Double, val longitude: Double, val distancia: Double = 0.0, val bairro: String = "", val cidade: String = "", val regiao: String = "", val descricao: String = "", val fonte: String = "GDACS", val transporte: String = "A pé")
 data class Ocorrencia(val titulo: String, val endereco: String, val lat: Double, val lng: Double, val tipo: TipoOcorrencia, val categoria: String? = null)
+data class RelatoComunidade(val id: String, val tipo: String, val gravidade: String, val local: String, val descricao: String, val dataHora: String, var status: String = "Em análise", val autor: String = "Comunidade")
 enum class TipoOcorrencia { SAIDA, MONITOR, DESASTRE, SEGURANCA }
 sealed class Screen(val route: String) {
-    object Termos : Screen("termos"); object PermissaoLocalizacao : Screen("permissao_localizacao"); object Login : Screen("login"); object Cadastro : Screen("cadastro"); object RecuperarSenha : Screen("recuperar_senha"); object Home : Screen("home"); object Mapa : Screen("mapa"); object Historico : Screen("historico"); object Perfil : Screen("perfil"); object SOS : Screen("sos"); object Ajuda : Screen("ajuda")
+    object Termos : Screen("termos"); object PermissaoLocalizacao : Screen("permissao_localizacao"); object Login : Screen("login"); object Cadastro : Screen("cadastro"); object RecuperarSenha : Screen("recuperar_senha"); object Home : Screen("home"); object Mapa : Screen("mapa"); object Historico : Screen("historico"); object Perfil : Screen("perfil"); object SOS : Screen("sos"); object Ajuda : Screen("ajuda"); object Contribuir : Screen("contribuir"); object Alertas : Screen("alertas")
 }
+object RelatosComunidadeStore { val relatos = mutableStateListOf<RelatoComunidade>() }
+object NotificacoesSafePointStore { val itens = mutableStateListOf<Pair<String, String>>() }
 object PrefsHelper {
     fun getPrefs(context: Context): SharedPreferences = context.getSharedPreferences("safepoint_prefs", Context.MODE_PRIVATE)
     fun getUserId(context: Context): String? = getPrefs(context).getString("user_id", null)
@@ -173,6 +182,8 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Perfil.route) { TelaPerfil(navController, auth, db) }
                     composable(Screen.SOS.route) { TelaSOS(onVoltar = { navController.popBackStack() }) }
                     composable(Screen.Ajuda.route) { TelaAjudaComoUsar(onVoltar = { navController.popBackStack() }) }
+                    composable(Screen.Contribuir.route) { TelaContribuir(navController) }
+                    composable(Screen.Alertas.route) { TelaAlertas(navController) }
                 }
             }
         }
@@ -473,6 +484,22 @@ fun TelaTermosUso(onAceitar: () -> Unit) {
                     Text("Consulte alertas, localizações e atualizações recentes.", modifier = Modifier.padding(top = 8.dp), fontSize = 14.sp, lineHeight = 19.sp, color = Color(0xFF355777))
                 }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Card(Modifier.weight(1f).clickable { navController.navigate(Screen.Contribuir.route) }, shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF1D6))) {
+                    Column(Modifier.padding(16.dp)) {
+                        Icon(Icons.Default.AddCircle, null, tint = Color(0xFFB26A00), modifier = Modifier.size(32.dp))
+                        Text("Contribuir", modifier = Modifier.padding(top = 6.dp), fontWeight = FontWeight.Bold, color = Color(0xFF8A5600))
+                        Text("Enviar relato", modifier = Modifier.padding(top = 3.dp), fontSize = 11.sp, color = Color(0xFF6B5A3A))
+                    }
+                }
+                Card(Modifier.weight(1f).clickable { navController.navigate(Screen.Alertas.route) }, shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8E7FF))) {
+                    Column(Modifier.padding(16.dp)) {
+                        Icon(Icons.Default.NotificationsActive, null, tint = Color(0xFF4B4BA5), modifier = Modifier.size(32.dp))
+                        Text("Alertas", modifier = Modifier.padding(top = 6.dp), fontWeight = FontWeight.Bold, color = Color(0xFF3F3F8F))
+                        Text("Notificações", modifier = Modifier.padding(top = 3.dp), fontSize = 11.sp, color = Color(0xFF53537D))
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -483,6 +510,147 @@ val NOMES_SEGURANCA = mapOf("hospital" to "Hospital", "fire_station" to "Bombeir
 val CORES_SEGURANCA = mapOf("hospital" to Color(0xFFD32F2F), "fire_station" to Color(0xFFF57C00), "police" to Color(0xFF1565C0), "shelter" to Color(0xFF2E7D32), "pharmacy" to Color(0xFF7B1FA2))
 
 
+
+private const val SAFEPOINT_NOTIFICATION_CHANNEL = "safepoint_alertas"
+
+private fun criarCanalNotificacoesSafePoint(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val canal = NotificationChannel(SAFEPOINT_NOTIFICATION_CHANNEL, "Alertas do SafePoint", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "Notificações sobre alertas, abrigos e relatos validados"
+        }
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(canal)
+    }
+}
+
+private fun enviarNotificacaoSafePoint(context: Context, titulo: String, texto: String) {
+    criarCanalNotificacoesSafePoint(context)
+    NotificacoesSafePointStore.itens.add(0, titulo to texto)
+    val intent = Intent(context, MainActivity::class.java)
+    val pending = PendingIntent.getActivity(context, titulo.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val notification = NotificationCompat.Builder(context, SAFEPOINT_NOTIFICATION_CHANNEL)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle(titulo)
+        .setContentText(texto)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(texto))
+        .setContentIntent(pending)
+        .setAutoCancel(true)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .build()
+    try {
+        if (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            NotificationManagerCompat.from(context).notify(kotlin.math.abs(titulo.hashCode()), notification)
+        }
+    } catch (_: SecurityException) { }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TelaContribuir(navController: NavController) {
+    val context = LocalContext.current
+    var aba by remember { mutableStateOf(0) }
+    var tipo by remember { mutableStateOf("Enchente") }
+    var gravidade by remember { mutableStateOf("Média") }
+    var local by remember { mutableStateOf("") }
+    var descricao by remember { mutableStateOf("") }
+    var mensagem by remember { mutableStateOf("") }
+    val tipos = listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Ciclone", "Terremoto")
+    val gravidades = listOf("Baixa", "Média", "Alta", "Crítica")
+
+    Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }, containerColor = Color(0xFFF4F7FA)) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFF0B2545), Color(0xFF0D5B52)))).statusBarsPadding().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Voltar", tint = Color.White) }
+                    Text("Contribuição da comunidade", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+                Text("Relate uma situação de risco para análise antes da divulgação.", color = Color(0xFFC9E8DF), fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
+            }
+            Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = aba == 0, onClick = { aba = 0 }, label = { Text("Novo relato") }, leadingIcon = { Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp)) })
+                FilterChip(selected = aba == 1, onClick = { aba = 1 }, label = { Text("Validação (${RelatosComunidadeStore.relatos.count { it.status == "Em análise" }})") }, leadingIcon = { Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(16.dp)) })
+            }
+            if (aba == 0) {
+                Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Tipo de ocorrência", fontWeight = FontWeight.Bold, color = Color(0xFF0B2545))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(tipos) { item -> FilterChip(selected = tipo == item, onClick = { tipo = item }, label = { Text(item, fontSize = 10.sp) }) } }
+                    Text("Gravidade", fontWeight = FontWeight.Bold, color = Color(0xFF0B2545))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(gravidades) { item -> FilterChip(selected = gravidade == item, onClick = { gravidade = item }, label = { Text(item, fontSize = 10.sp) }) } }
+                    OutlinedTextField(value = local, onValueChange = { local = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Local do ocorrido") }, placeholder = { Text("Cidade, bairro ou ponto de referência") }, singleLine = true, leadingIcon = { Icon(Icons.Default.Place, null) })
+                    OutlinedTextField(value = descricao, onValueChange = { descricao = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 130.dp), label = { Text("O que aconteceu?") }, placeholder = { Text("Descreva os sinais observados e quando ocorreu") }, minLines = 5)
+                    Button(onClick = {
+                        val localLimpo = local.trim(); val descricaoLimpa = descricao.trim()
+                        mensagem = when {
+                            localLimpo.length < 3 -> "Informe o local do ocorrido."
+                            descricaoLimpa.length < 15 -> "Descreva o ocorrido com pelo menos 15 caracteres."
+                            else -> {
+                                val agora = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date())
+                                RelatosComunidadeStore.relatos.add(RelatoComunidade(UUID.randomUUID().toString(), tipo, gravidade, localLimpo, descricaoLimpa, agora))
+                                local = ""; descricao = ""
+                                "Relato enviado para análise. Ele só será divulgado após a validação."
+                            }
+                        }
+                    }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(6.dp)); Text("Enviar para validação") }
+                    if (mensagem.isNotBlank()) Text(mensagem, color = Color(0xFF526172), fontSize = 11.sp)
+                }
+            } else {
+                Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Triagem e validação", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545))
+                    Text("Cada relato passa por análise de completude e permanece oculto até ser aprovado.", color = Color(0xFF526172), fontSize = 11.sp)
+                    if (RelatosComunidadeStore.relatos.isEmpty()) Text("Nenhum relato aguardando análise.", color = Color.Gray, modifier = Modifier.padding(vertical = 20.dp))
+                    RelatosComunidadeStore.relatos.forEachIndexed { indice, relato ->
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) { Text("${relato.tipo} • ${relato.local}", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Color(0xFF0B2545)); Text(relato.status, color = if (relato.status == "Publicado") Color(0xFF2E7D32) else Color(0xFFB26A00), fontSize = 10.sp) }
+                                Text("${relato.gravidade} • ${relato.dataHora}", color = Color(0xFF64748B), fontSize = 10.sp)
+                                Text(relato.descricao, color = Color(0xFF334155), fontSize = 11.sp)
+                                if (relato.status == "Em análise") Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                    OutlinedButton(onClick = { RelatosComunidadeStore.relatos[indice] = relato.copy(status = "Não aprovado") }) { Text("Reprovar", fontSize = 10.sp) }
+                                    Button(onClick = { RelatosComunidadeStore.relatos[indice] = relato.copy(status = "Publicado"); enviarNotificacaoSafePoint(context, "Relato validado", "Um relato de ${relato.tipo.lowercase(Locale.ROOT)} em ${relato.local} foi aprovado.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Aprovar", fontSize = 10.sp) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TelaAlertas(navController: NavController) {
+    val context = LocalContext.current
+    var notificacoesPermitidas by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notificacoesPermitidas = it }
+    LaunchedEffect(Unit) {
+        criarCanalNotificacoesSafePoint(context)
+        if (NotificacoesSafePointStore.itens.isEmpty()) {
+            NotificacoesSafePointStore.itens.add("Alertas próximos" to "Ative as notificações para receber atualizações do SafePoint.")
+            NotificacoesSafePointStore.itens.add("Abrigos" to "Consulte no mapa os abrigos disponíveis ao redor da sua rota.")
+        }
+    }
+    Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }, containerColor = Color(0xFFF4F7FA)) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(Color(0xFF0B2545), Color(0xFF0D5B52)))).statusBarsPadding().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Voltar", tint = Color.White) }; Text("Central de alertas", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold) }
+                Text("Receba avisos do SafePoint no celular.", color = Color(0xFFC9E8DF), fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
+            }
+            Card(Modifier.fillMaxWidth().padding(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(if (notificacoesPermitidas) "Notificações ativadas" else "Notificações desativadas", fontWeight = FontWeight.Bold, color = if (notificacoesPermitidas) Color(0xFF2E7D32) else Color(0xFFB26A00))
+                    Text("Você pode receber avisos sobre relatos validados, abrigos e situações de risco próximas.", color = Color(0xFF526172), fontSize = 11.sp)
+                    if (!notificacoesPermitidas) Button(onClick = { if (Build.VERSION.SDK_INT >= 33) permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else notificacoesPermitidas = true }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Icon(Icons.Default.NotificationsActive, null); Spacer(Modifier.width(6.dp)); Text("Ativar notificações") }
+                    Button(onClick = { enviarNotificacaoSafePoint(context, "Alerta do SafePoint", "Há uma nova atualização disponível no centro de alertas.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1267A5))) { Icon(Icons.Default.Notifications, null); Spacer(Modifier.width(6.dp)); Text("Testar notificação") }
+                }
+            }
+            Text("Atualizações recentes", Modifier.padding(horizontal = 14.dp, vertical = 4.dp), fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 17.sp)
+            Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                NotificacoesSafePointStore.itens.forEach { (titulo, texto) ->
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) { Row(Modifier.padding(13.dp), verticalAlignment = Alignment.Top) { Icon(Icons.Default.Notifications, null, tint = Color(0xFF4B4BA5)); Spacer(Modifier.width(10.dp)); Column { Text(titulo, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545)); Text(texto, color = Color(0xFF526172), fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp)) } } }
+                }
+            }
+        }
+    }
+}
 
 // MAPA PROFISSIONAL GPS REAL - VERSÃO 3.0 PROFISSIONAL COM ROTA AZUL, TEMPO E ALERTAS COLORIDOS
 data class RotaInfo(val distanciaKm: Double, val duracaoMin: Int, val duracaoTexto: String, val distanciaTexto: String, val chegadaTexto: String)
@@ -920,6 +1088,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     var buscaPersonalizada by remember { mutableStateOf(false) }
     var alertasDoLocal by remember { mutableStateOf<List<AlertaDemo>>(emptyList()) }
     var abrigosDoMapa by remember { mutableStateOf<List<AbrigoDemo>>(emptyList()) }
+    var mostrarLegenda by remember { mutableStateOf(false) }
     var temPermissao by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -961,10 +1130,11 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
     }
 
     fun cidadesMundoDemo(): List<CidadeDemo> {
-        val nomes = listOf(
-            "São Paulo", "Rio de Janeiro", "Brasília", "Manaus", "New York", "Los Angeles", "Toronto", "Mexico City", "London", "Paris", "Berlin", "Madrid", "Rome", "Cairo", "Lagos", "Nairobi", "Cape Town", "Dubai", "Mumbai", "Delhi", "Tokyo", "Seoul", "Beijing", "Singapore", "Bangkok", "Jakarta", "Sydney", "Auckland", "Istanbul", "Moscow", "Buenos Aires", "Santiago", "Lima", "Bogotá", "Quito"
-        )
-        return nomes.mapNotNull { nome -> SafePointDemoData.cidades.firstOrNull { it.nome == nome } }.distinctBy { it.nome }
+        val estadosBrasil = setOf("AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO")
+        val localidadesInternacionais = SafePointDemoData.cidades.filter { cidade ->
+            cidade.nome != "Brasil" && cidade.uf !in estadosBrasil && !cidade.uf.startsWith("SP-")
+        }
+        return (cidadesBrasilDemo() + localidadesInternacionais).distinctBy { "${it.nome}|${it.uf}" }
     }
 
     fun carregarDadosDemonstrativos(local: CidadeDemo) {
@@ -978,8 +1148,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         when (local.nome.lowercase(Locale.ROOT)) {
             "mundo", "global", "world" -> {
                 val cidades = cidadesMundoDemo()
-                alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 4, "mapa-global", indice * 4) }.distinctBy { it.id }
-                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 2, "abrigo-global") }.distinctBy { it.id }
+                alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 2, "mapa-global", indice * 2) }.distinctBy { it.id }
+                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 1, "abrigo-global") }.distinctBy { it.id }
             }
             "brasil", "brazil" -> {
                 val cidades = cidadesBrasilDemo()
@@ -1150,7 +1320,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         carregarDadosDemonstrativos(cidadeSelecionada)
     }
     LaunchedEffect(temPermissao) {
-        if (temPermissao) atualizarPosicaoUsuario(centralizar = !buscaPersonalizada)
+        if (temPermissao) atualizarPosicaoUsuario(centralizar = false)
     }
     DisposableEffect(temPermissao) {
         if (!temPermissao) return@DisposableEffect onDispose { }
@@ -1365,11 +1535,33 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
                 Surface(Modifier.align(Alignment.BottomEnd).padding(6.dp), color = Color(0xE6FFFFFF), shape = RoundedCornerShape(7.dp)) {
                     Text("Mapa: OpenStreetMap", color = Color(0xFF34495E), fontSize = 8.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp))
                 }
-                Surface(Modifier.align(Alignment.BottomStart).padding(6.dp), color = Color(0xE60B2545), shape = RoundedCornerShape(8.dp)) {
-                    Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(9.dp).background(Color(0xFF16884D), CircleShape)); Text(" + ", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text("Abrigo", color = Color.White, fontSize = 9.sp)
-                    }
+                SmallFloatingActionButton(onClick = { mostrarLegenda = true }, modifier = Modifier.align(Alignment.BottomStart).padding(6.dp), containerColor = Color.White) {
+                    Icon(Icons.Default.Info, "Abrir legenda do mapa", tint = Color(0xFF0B2545))
+                }
+                if (mostrarLegenda) {
+                    AlertDialog(
+                        onDismissRequest = { mostrarLegenda = false },
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Legenda do mapa", Modifier.weight(1f), color = Color(0xFF0B2545), fontWeight = FontWeight.Bold)
+                                IconButton(onClick = { mostrarLegenda = false }) { Icon(Icons.Default.Close, "Fechar legenda", tint = Color(0xFF0B2545)) }
+                            }
+                        },
+                        text = {
+                            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text("Pontos e símbolos", color = Color(0xFF0B2545), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(12.dp).background(Color(0xFF16884D), CircleShape)); Spacer(Modifier.width(7.dp)); Text("Gota verde com +: abrigo disponível", fontSize = 11.sp) }
+                                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Navigation, null, tint = Color(0xFF1976D2), modifier = Modifier.size(15.dp)); Spacer(Modifier.width(7.dp)); Text("Seta azul: localização do usuário", fontSize = 11.sp) }
+                                Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.width(22.dp).height(4.dp).background(Color(0xFF217EE6), RoundedCornerShape(2.dp))); Spacer(Modifier.width(7.dp)); Text("Linha azul: rota calculada", fontSize = 11.sp) }
+                                Text("Cores dos alertas", color = Color(0xFF0B2545), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                TIPOS_ALERTA_DEMONSTRACAO.forEach { tipo ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(12.dp).background(CORES_TIPOS_ALERTA[tipo] ?: Color.Gray, CircleShape)); Spacer(Modifier.width(7.dp)); Text(tipo, fontSize = 11.sp) }
+                                }
+                                Text("Gravidade: verde = baixa, amarelo = média, laranja = alta e vermelho = crítica.", color = Color(0xFF475569), fontSize = 10.sp)
+                            }
+                        },
+                        confirmButton = { TextButton(onClick = { mostrarLegenda = false }) { Text("Fechar") } }
+                    )
                 }
                 if (rotaCarregando) {
                     Surface(Modifier.align(Alignment.TopStart).padding(8.dp), color = Color.White, shape = RoundedCornerShape(10.dp)) {
@@ -1739,7 +1931,8 @@ object OsrmRepository {
                 longitude = alerta.lng,
                 cidade = nomeCidade,
                 descricao = alerta.descricao,
-                fonte = "SafePoint"
+                fonte = "SafePoint",
+                transporte = listOf("Carro", "Moto", "Bicicleta", "A pé", "Ônibus")[Math.floorMod(indice, 5)]
             )
         }.sortedByDescending { runCatching { formatoData.parse(it.dataHora)?.time ?: 0L }.getOrDefault(0L) }
             .distinctBy { it.id }
@@ -1911,6 +2104,7 @@ object OsrmRepository {
                                     }
                                     Text(alerta.localizacao, color = Color(0xFF475569), fontSize = 10.sp)
                                     Text("Data e horário: ${alerta.dataHora}", color = Color.Gray, fontSize = 9.sp)
+                                    Text("Transporte: ${alerta.transporte} • registro histórico", color = Color(0xFF526172), fontSize = 9.sp)
                                     Text("Toque para ler a descrição", color = Color(0xFF16845F), fontWeight = FontWeight.SemiBold, fontSize = 9.sp)
                                 }
                             }
@@ -1936,6 +2130,8 @@ object OsrmRepository {
                     Text(alerta.descricao, color = Color(0xFF334155), fontSize = 12.sp)
                     Text("Local: ${alerta.localizacao}", color = Color(0xFF475569), fontSize = 11.sp)
                     Text("Data e horário: ${alerta.dataHora}", color = Color(0xFF475569), fontSize = 11.sp)
+                    Text("Meio de transporte: ${alerta.transporte}", color = Color(0xFF475569), fontSize = 11.sp)
+                    Text("Evento registrado anteriormente neste local.", color = Color(0xFF526172), fontSize = 10.sp)
                     Text("Coordenadas: ${String.format(Locale("pt", "BR"), "%.4f", alerta.latitude)}, ${String.format(Locale("pt", "BR"), "%.4f", alerta.longitude)}", color = Color(0xFF64748B), fontSize = 10.sp)
                 }
             },
