@@ -124,7 +124,7 @@ val BotaoGradiente = gradientBotaoOriginal
 
 data class AlertaRota(val id: String, val titulo: String, val dataHora: String, val localizacao: String, val gravidade: String, val tipo: String, val latitude: Double, val longitude: Double, val distancia: Double = 0.0, val bairro: String = "", val cidade: String = "", val regiao: String = "", val descricao: String = "", val fonte: String = "GDACS", val transporte: String = "A pé")
 data class Ocorrencia(val titulo: String, val endereco: String, val lat: Double, val lng: Double, val tipo: TipoOcorrencia, val categoria: String? = null)
-data class RelatoComunidade(val id: String, val tipo: String, val gravidade: String, val local: String, val descricao: String, val dataHora: String, var status: String = "Em análise", val autor: String = "Comunidade")
+data class RelatoComunidade(val id: String, val tipo: String, val gravidade: String, val local: String, val descricao: String, val dataHora: String, var status: String = "EM_ANALISE", val autor: String = "Comunidade", val fotoUrl: String = "", val aprovadoPor: String = "", val publicadoEm: String = "")
 enum class TipoOcorrencia { SAIDA, MONITOR, DESASTRE, SEGURANCA }
 sealed class Screen(val route: String) {
     object Termos : Screen("termos"); object PermissaoLocalizacao : Screen("permissao_localizacao"); object Login : Screen("login"); object Cadastro : Screen("cadastro"); object RecuperarSenha : Screen("recuperar_senha"); object Home : Screen("home"); object Mapa : Screen("mapa"); object Historico : Screen("historico"); object Perfil : Screen("perfil"); object SOS : Screen("sos"); object Ajuda : Screen("ajuda"); object Contribuir : Screen("contribuir"); object Alertas : Screen("alertas")
@@ -575,6 +575,7 @@ private fun enviarNotificacaoSafePoint(context: Context, titulo: String, texto: 
 fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
     val context = LocalContext.current
     val db = remember { FirebaseFirestore.getInstance() }
+    val storage = remember { FirebaseStorage.getInstance() }
     val usuario = auth.currentUser
     val moderador = usuario?.email.equals(EMAIL_MODERADOR_SAFEPOINT, ignoreCase = true)
     var aba by remember { mutableStateOf(0) }
@@ -583,16 +584,34 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
     var local by remember { mutableStateOf("") }
     var descricao by remember { mutableStateOf("") }
     var mensagem by remember { mutableStateOf("") }
+    var fotoUri by remember { mutableStateOf<Uri?>(null) }
     var relatosNuvem by remember { mutableStateOf<List<RelatoComunidade>>(emptyList()) }
     val tipos = listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Ciclone", "Terremoto")
     val gravidades = listOf("Baixa", "Média", "Alta", "Crítica")
     DisposableEffect(Unit) {
-        val listener = db.collection("relatos_comunidade").addSnapshotListener { snapshot, _ ->
+        val consulta = if (moderador) db.collection("relatos_comunidade") else db.collection("relatos_comunidade").whereEqualTo("status", "APROVADO")
+        val listener = consulta.addSnapshotListener { snapshot, _ ->
             relatosNuvem = snapshot?.documents?.map { doc ->
-                RelatoComunidade(doc.id, doc.getString("tipo").orEmpty(), doc.getString("gravidade").orEmpty(), doc.getString("local").orEmpty(), doc.getString("descricao").orEmpty(), doc.getString("dataHora").orEmpty(), doc.getString("status") ?: "EM_ANALISE", doc.getString("autorEmail") ?: "Comunidade")
+                RelatoComunidade(doc.id, doc.getString("tipo").orEmpty(), doc.getString("gravidade").orEmpty(), doc.getString("local").orEmpty(), doc.getString("descricao").orEmpty(), doc.getString("dataHora").orEmpty(), doc.getString("status") ?: "EM_ANALISE", doc.getString("autorEmail") ?: "Comunidade", doc.getString("fotoUrl").orEmpty(), doc.getString("aprovadoPor").orEmpty(), doc.getString("publicadoEm").orEmpty())
             }?.sortedByDescending { it.dataHora } ?: emptyList()
         }
         onDispose { listener.remove() }
+    }
+    val fotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> fotoUri = uri }
+    fun concluirEnvio(dados: HashMap<String, Any>, tipoEnviado: String, localEnviado: String, descricaoEnviada: String) {
+        db.collection("relatos_comunidade").add(dados).addOnSuccessListener {
+            db.collection("mail").add(mapOf("to" to listOf(EMAIL_MODERADOR_SAFEPOINT), "message" to mapOf("subject" to "Novo relato aguardando aprovação no SafePoint", "html" to "<h2>Novo relato comunitário</h2><p><b>Tipo:</b> $tipoEnviado</p><p><b>Gravidade:</b> ${dados["gravidade"]}</p><p><b>Local:</b> $localEnviado</p><p>$descricaoEnviada</p><p>Abra o SafePoint para aprovar ou negar.</p>")))
+            mensagem = "Relato enviado para análise. Ele só será divulgado após a validação."
+        }.addOnFailureListener { erro -> mensagem = "Não foi possível salvar o relato: ${erro.localizedMessage ?: "erro do Firebase"}" }
+    }
+    fun enviarRelato(tipoEnviado: String, gravidadeEnviada: String, localEnviado: String, descricaoEnviada: String) {
+        val dados = hashMapOf<String, Any>("tipo" to tipoEnviado, "gravidade" to gravidadeEnviada, "local" to localEnviado, "descricao" to descricaoEnviada, "dataHora" to SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date()), "status" to "EM_ANALISE", "autorUid" to (usuario?.uid ?: ""), "autorEmail" to (usuario?.email ?: ""), "criadoEm" to com.google.firebase.firestore.FieldValue.serverTimestamp())
+        val uri = fotoUri
+        if (uri == null) concluirEnvio(dados, tipoEnviado, localEnviado, descricaoEnviada)
+        else {
+            val referencia = storage.reference.child("relatos/${usuario?.uid ?: "anonimo"}/${UUID.randomUUID()}.jpg")
+            referencia.putFile(uri).continueWithTask { referencia.downloadUrl }.addOnSuccessListener { url -> dados["fotoUrl"] = url.toString(); concluirEnvio(dados, tipoEnviado, localEnviado, descricaoEnviada) }.addOnFailureListener { erro -> mensagem = "Não foi possível enviar a foto: ${erro.localizedMessage ?: "erro do armazenamento"}" }
+        }
     }
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }, containerColor = Color(0xFFF4F7FA)) { padding ->
@@ -606,7 +625,7 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
             }
             Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = aba == 0, onClick = { aba = 0 }, label = { Text("Novo relato") }, leadingIcon = { Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp)) })
-                FilterChip(selected = aba == 1, onClick = { aba = 1 }, label = { Text("Validação (${relatosNuvem.count { it.status == "EM_ANALISE" }})") }, leadingIcon = { Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(16.dp)) })
+                FilterChip(selected = aba == 1, onClick = { aba = 1 }, label = { Text(if (moderador) "Validação (${relatosNuvem.count { it.status == "EM_ANALISE" }})" else "Relatos publicados (${relatosNuvem.size})") }, leadingIcon = { Icon(if (moderador) Icons.Default.VerifiedUser else Icons.Default.Public, null, modifier = Modifier.size(16.dp)) })
             }
             if (aba == 0) {
                 Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -616,19 +635,21 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(gravidades) { item -> FilterChip(selected = gravidade == item, onClick = { gravidade = item }, label = { Text(item, fontSize = 10.sp) }) } }
                     OutlinedTextField(value = local, onValueChange = { local = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Local do ocorrido") }, placeholder = { Text("Cidade, bairro ou ponto de referência") }, singleLine = true, leadingIcon = { Icon(Icons.Default.Place, null) })
                     OutlinedTextField(value = descricao, onValueChange = { descricao = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 130.dp), label = { Text("O que aconteceu?") }, placeholder = { Text("Descreva os sinais observados e quando ocorreu") }, minLines = 5)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { fotoPicker.launch("image/*") }) { Icon(Icons.Default.AddAPhoto, null); Spacer(Modifier.width(5.dp)); Text(if (fotoUri == null) "Adicionar foto" else "Trocar foto", fontSize = 11.sp) }
+                        if (fotoUri != null) { AsyncImage(model = fotoUri, contentDescription = "Foto selecionada", modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop); Text("Foto anexada", fontSize = 10.sp, color = Color(0xFF2E7D32)) }
+                    }
                     Button(onClick = {
                         val localLimpo = local.trim(); val descricaoLimpa = descricao.trim()
                         mensagem = when {
                             localLimpo.length < 3 -> "Informe o local do ocorrido."
                             descricaoLimpa.length < 15 -> "Descreva o ocorrido com pelo menos 15 caracteres."
                             else -> {
-                                val agora = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date())
-                                val relato = hashMapOf<String, Any>("tipo" to tipo, "gravidade" to gravidade, "local" to localLimpo, "descricao" to descricaoLimpa, "dataHora" to agora, "status" to "EM_ANALISE", "autorUid" to (usuario?.uid ?: ""), "autorEmail" to (usuario?.email ?: ""), "criadoEm" to com.google.firebase.firestore.FieldValue.serverTimestamp())
-                                db.collection("relatos_comunidade").add(relato).addOnSuccessListener {
-                                    db.collection("mail").add(mapOf("to" to listOf(EMAIL_MODERADOR_SAFEPOINT), "message" to mapOf("subject" to "Novo relato aguardando aprovação no SafePoint", "html" to "<h2>Novo relato comunitário</h2><p><b>Tipo:</b> $tipo</p><p><b>Gravidade:</b> $gravidade</p><p><b>Local:</b> $localLimpo</p><p>$descricaoLimpa</p><p>Abra o SafePoint para aprovar ou negar.</p>")))
-                                }.addOnFailureListener { erro -> mensagem = "Não foi possível salvar o relato: ${erro.localizedMessage ?: "erro do Firebase"}" }
+                                val tinhaFoto = fotoUri != null
+                                enviarRelato(tipo, gravidade, localLimpo, descricaoLimpa)
                                 local = ""; descricao = ""
-                                "Relato enviado para análise. Ele só será divulgado após a validação."
+                                fotoUri = null
+                                "Enviando relato${if (tinhaFoto) " e foto" else ""}…"
                             }
                         }
                     }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(6.dp)); Text("Enviar para validação") }
@@ -639,7 +660,7 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
                     Text("Triagem e validação", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545))
                     Text("Cada relato passa por análise de completude e permanece oculto até ser aprovado.", color = Color(0xFF526172), fontSize = 11.sp)
                     if (!moderador) Text("A aprovação é restrita ao moderador responsável. Aqui você pode acompanhar os relatos publicados.", color = Color(0xFF526172), fontSize = 11.sp)
-                    val listaExibida = if (moderador) relatosNuvem.filter { it.status == "EM_ANALISE" } else relatosNuvem.filter { it.status == "APROVADO" }
+                    val listaExibida = if (moderador) relatosNuvem else relatosNuvem.filter { it.status == "APROVADO" }
                     if (listaExibida.isEmpty()) Text(if (moderador) "Nenhum relato aguardando análise." else "Nenhum relato publicado ainda.", color = Color.Gray, modifier = Modifier.padding(vertical = 20.dp))
                     listaExibida.forEach { relato ->
                         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -647,10 +668,13 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
                                 Row(verticalAlignment = Alignment.CenterVertically) { Text("${relato.tipo} • ${relato.local}", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Color(0xFF0B2545)); Text(if (relato.status == "APROVADO") "Publicado" else "Em análise", color = if (relato.status == "APROVADO") Color(0xFF2E7D32) else Color(0xFFB26A00), fontSize = 10.sp) }
                                 Text("${relato.gravidade} • ${relato.dataHora}", color = Color(0xFF64748B), fontSize = 10.sp)
                                 Text(relato.descricao, color = Color(0xFF334155), fontSize = 11.sp)
+                                if (relato.fotoUrl.isNotBlank()) AsyncImage(model = relato.fotoUrl, contentDescription = "Foto do relato", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+                                if (relato.status == "APROVADO") Text("Aprovado por ${relato.aprovadoPor.ifBlank { "moderador do SafePoint" }}${if (relato.publicadoEm.isNotBlank()) " • publicado em ${relato.publicadoEm}" else ""}", color = Color(0xFF2E7D32), fontSize = 10.sp)
                                 if (moderador && relato.status == "EM_ANALISE") Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     OutlinedButton(onClick = { db.collection("relatos_comunidade").document(relato.id).update("status", "NEGADO", "moderadoPor", EMAIL_MODERADOR_SAFEPOINT) }) { Text("Negar", fontSize = 10.sp) }
-                                    Button(onClick = { db.collection("relatos_comunidade").document(relato.id).update("status", "APROVADO", "moderadoPor", EMAIL_MODERADOR_SAFEPOINT, "aprovadoEm", com.google.firebase.firestore.FieldValue.serverTimestamp()); enviarNotificacaoSafePoint(context, "Relato validado", "Um relato de ${relato.tipo.lowercase(Locale.ROOT)} em ${relato.local} foi aprovado.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Aprovar", fontSize = 10.sp) }
+                                    Button(onClick = { val agora = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date()); db.collection("relatos_comunidade").document(relato.id).update("status", "APROVADO", "aprovadoPor", EMAIL_MODERADOR_SAFEPOINT, "publicadoPor", EMAIL_MODERADOR_SAFEPOINT, "publicadoEm", agora, "aprovadoEm", com.google.firebase.firestore.FieldValue.serverTimestamp()); enviarNotificacaoSafePoint(context, "Relato validado", "Um relato de ${relato.tipo.lowercase(Locale.ROOT)} em ${relato.local} foi aprovado.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Aprovar", fontSize = 10.sp) }
                                 }
+                                if (moderador) OutlinedButton(onClick = { db.collection("relatos_comunidade").document(relato.id).delete() }) { Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Excluir relato", fontSize = 10.sp) }
                             }
                         }
                     }
@@ -668,8 +692,9 @@ fun TelaAlertas(navController: NavController) {
     LaunchedEffect(Unit) {
         criarCanalNotificacoesSafePoint(context)
         if (NotificacoesSafePointStore.itens.isEmpty()) {
-            NotificacoesSafePointStore.itens.add("Alertas próximos" to "Ative as notificações para receber atualizações do SafePoint.")
-            NotificacoesSafePointStore.itens.add("Abrigos" to "Consulte no mapa os abrigos disponíveis ao redor da sua rota.")
+            NotificacoesSafePointStore.itens.add("Nova versão do SafePoint" to "Confira melhorias no mapa, na consulta de alertas e na busca de abrigos.")
+            NotificacoesSafePointStore.itens.add("Atualização de segurança" to "A validação de relatos da comunidade foi aprimorada.")
+            NotificacoesSafePointStore.itens.add("Novos alertas disponíveis" to "O mapa recebeu atualizações de ocorrências e pontos de apoio.")
         }
     }
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }, containerColor = Color(0xFFF4F7FA)) { padding ->
@@ -681,9 +706,8 @@ fun TelaAlertas(navController: NavController) {
             Card(Modifier.fillMaxWidth().padding(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(if (notificacoesPermitidas) "Notificações ativadas" else "Notificações desativadas", fontWeight = FontWeight.Bold, color = if (notificacoesPermitidas) Color(0xFF2E7D32) else Color(0xFFB26A00))
-                    Text("Você pode receber avisos sobre relatos validados, abrigos e situações de risco próximas.", color = Color(0xFF526172), fontSize = 11.sp)
+                    Text("Receba automaticamente novidades do aplicativo e atualizações de alertas na sua região.", color = Color(0xFF526172), fontSize = 11.sp)
                     if (!notificacoesPermitidas) Button(onClick = { if (Build.VERSION.SDK_INT >= 33) permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else notificacoesPermitidas = true }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Icon(Icons.Default.NotificationsActive, null); Spacer(Modifier.width(6.dp)); Text("Ativar notificações") }
-                    Button(onClick = { enviarNotificacaoSafePoint(context, "Alerta do SafePoint", "Há uma nova atualização disponível no centro de alertas.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1267A5))) { Icon(Icons.Default.Notifications, null); Spacer(Modifier.width(6.dp)); Text("Testar notificação") }
                 }
             }
             Text("Atualizações recentes", Modifier.padding(horizontal = 14.dp, vertical = 4.dp), fontWeight = FontWeight.Bold, color = Color(0xFF0B2545), fontSize = 17.sp)
@@ -775,7 +799,7 @@ private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
         val tipo = tiposPermitidos[tipoIndice]
         val gravidade = GRAVIDADES_DEMONSTRACAO[Math.floorMod(seed + indice, GRAVIDADES_DEMONSTRACAO.size)]
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 350.0 else 1200.0 + indice * 900.0
+        val raioMetros = if (total == 1) 900.0 else 1800.0 + indice * 1400.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val descricao = when (tipo) {
             "Enchente" -> "Alagamento localizado após chuva intensa na região."
@@ -797,10 +821,11 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     val total = quantidade.coerceAtLeast(1)
     val nomeLocal = traduzirLocalidadeSafePoint(local.nome)
     val seed = (local.nome.hashCode().toLong() * 31L + (local.lat * 10000).toLong() * 17L + (local.lng * 10000).toLong()).toInt()
-    val anguloInicial = Math.floorMod(seed + 45, 360).toDouble() * Math.PI / 180.0
+    // Abrigos ocupam um setor diferente dos alertas para que os dois grupos não se sobreponham.
+    val anguloInicial = Math.floorMod(seed + 210, 360).toDouble() * Math.PI / 180.0
     return (0 until total).map { indice ->
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 900.0 else 3500.0 + indice * 2500.0
+        val raioMetros = if (total == 1) 6500.0 else 6500.0 + indice * 4200.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val nomesConhecidos = when (SafePointDemoData.normalizar(local.nome)) {
             "sao paulo" -> listOf("Hospital das Clínicas", "Hospital Municipal Dr. Cármino Caricchio", "Escola Estadual São Paulo", "3º Distrito Policial")
