@@ -232,7 +232,6 @@ class MainActivity : ComponentActivity() {
         auth = FirebaseAuth.getInstance(); db = FirebaseFirestore.getInstance()
         agendarNotificacoesAutomaticas(this)
         setContent {
-            MaterialTheme {
                 val navController = rememberNavController(); val context = LocalContext.current
                 var acessibilidadeAberta by remember { mutableStateOf(false) }
                 var textoMaior by remember { mutableStateOf(PrefsHelper.isTextoMaiorAtivo(context)) }
@@ -240,6 +239,12 @@ class MainActivity : ComponentActivity() {
                 var reduzirMovimento by remember { mutableStateOf(PrefsHelper.isReducaoMovimentoAtiva(context)) }
                 var leituraFacilitada by remember { mutableStateOf(PrefsHelper.isLeituraFacilitadaAtiva(context)) }
                 var coresDiferenciadas by remember { mutableStateOf(PrefsHelper.isCoresDiferenciadasAtiva(context)) }
+                val esquemaAcessivel = when {
+                    altoContraste -> darkColorScheme(background = Color.Black, surface = Color.Black, onBackground = Color.White, onSurface = Color.White, primary = Color.Yellow, onPrimary = Color.Black, secondary = Color.White, onSecondary = Color.Black)
+                    coresDiferenciadas -> lightColorScheme(primary = Color(0xFF5B2C83), onPrimary = Color.White, secondary = Color(0xFF007C91), onSecondary = Color.White, background = Color(0xFFF4EEFF), surface = Color.White, onBackground = Color(0xFF241B35), onSurface = Color(0xFF241B35))
+                    else -> lightColorScheme()
+                }
+            MaterialTheme(colorScheme = esquemaAcessivel) {
                 val termosAceitos = PrefsHelper.isTermosAceitos(context); val currentUser = auth.currentUser
                 val locDecidida = PrefsHelper.isLocalizacaoDecidida(context)
                 val notificacoesDecidida = PrefsHelper.isNotificacoesDecidida(context)
@@ -253,7 +258,7 @@ class MainActivity : ComponentActivity() {
                         fontWeight = if (leituraFacilitada) FontWeight.Medium else LocalTextStyle.current.fontWeight
                     )
                 ) {
-                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFFFFBF0) else Color.Transparent).then(if (altoContraste) Modifier.border(3.dp, Color.Yellow) else if (coresDiferenciadas) Modifier.border(2.dp, Color(0xFF1565C0)) else Modifier)) {
+                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFF4EEFF) else Color.Transparent)) {
                 NavHost(navController = navController, startDestination = startDest) {
                     composable(Screen.Termos.route) { TelaTermosUso(onAceitar = { PrefsHelper.setTermosAceitos(context, true); navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } } }) }
                     composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }) }
@@ -927,20 +932,32 @@ private fun deslocarCoordenadaDemo(lat: Double, lng: Double, metros: Double, ang
 }
 
 /** Conjunto de alertas organizados por localidade. */
+private fun direcoesTerrestres(local: CidadeDemo): List<Double> = when (SafePointDemoData.normalizar(local.nome)) {
+    "rio de janeiro" -> listOf(315.0, 270.0, 0.0, 45.0, 225.0)
+    "santos" -> listOf(0.0, 270.0, 315.0, 45.0, 225.0)
+    "new york" -> listOf(315.0, 270.0, 0.0, 225.0, 45.0)
+    "london" -> listOf(45.0, 90.0, 0.0, 315.0, 270.0)
+    "mumbai" -> listOf(90.0, 45.0, 0.0, 315.0, 270.0)
+    "tokyo" -> listOf(270.0, 315.0, 0.0, 225.0, 45.0)
+    "singapore" -> listOf(0.0, 315.0, 45.0, 270.0, 225.0)
+    "jakarta" -> listOf(0.0, 315.0, 270.0, 45.0, 225.0)
+    else -> listOf(0.0, 72.0, 144.0, 216.0, 288.0)
+}
+
 private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefixo: String, tipoForcadoIndex: Int? = null): List<AlertaDemo> {
-    val total = quantidade.coerceAtLeast(1)
+    val total = quantidade.coerceAtLeast(1).coerceAtMost(tiposAlertasParaLocal(local).size)
     val nomeLocal = traduzirLocalidadeSafePoint(local.nome)
     val tiposPermitidos = tiposAlertasParaLocal(local)
     val seed = (local.nome.hashCode().toLong() * 31L + (local.lat * 10000).toLong() * 17L + (local.lng * 10000).toLong()).toInt()
-    val anguloInicial = Math.floorMod(seed, 360).toDouble() * Math.PI / 180.0
+    val direcoes = direcoesTerrestres(local)
     val agora = System.currentTimeMillis()
     return (0 until total).map { indice ->
         val tipoIndice = tipoForcadoIndex?.let { Math.floorMod(it + indice, tiposPermitidos.size) }
             ?: Math.floorMod(seed + indice * 3, tiposPermitidos.size)
         val tipo = tiposPermitidos[tipoIndice]
         val gravidade = GRAVIDADES_DEMONSTRACAO[Math.floorMod(seed + indice, GRAVIDADES_DEMONSTRACAO.size)]
-        val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 25000.0 else 25000.0 + indice * 25000.0
+        val angulo = direcoes[Math.floorMod(indice + seed, direcoes.size)] * Math.PI / 180.0
+        val raioMetros = if (total == 1) 12000.0 else 12000.0 + indice * 9000.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val descricao = when (tipo) {
             "Enchente" -> "Alagamento localizado após chuva intensa na região."
@@ -963,10 +980,11 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     val nomeLocal = traduzirLocalidadeSafePoint(local.nome)
     val seed = (local.nome.hashCode().toLong() * 31L + (local.lat * 10000).toLong() * 17L + (local.lng * 10000).toLong()).toInt()
     // Abrigos ocupam um setor diferente dos alertas para que os dois grupos não se sobreponham.
-    val anguloInicial = Math.floorMod(seed + 210, 360).toDouble() * Math.PI / 180.0
+    val direcoes = direcoesTerrestres(local)
     return (0 until total).map { indice ->
-        val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 3500.0 else 3500.0 + indice * 2500.0
+        val indiceDirecao = Math.floorMod(indice + seed + 2, direcoes.size)
+        val angulo = direcoes[indiceDirecao] * Math.PI / 180.0
+        val raioMetros = if (total == 1) 4500.0 else 4500.0 + indice * 3500.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val nomesConhecidos = when (SafePointDemoData.normalizar(local.nome)) {
             "sao paulo" -> listOf("Hospital das Clínicas", "Escola Estadual São Paulo", "3º Distrito Policial", "Centro Comunitário Sé", "Defesa Civil de São Paulo", "Hospital Municipal Dr. Cármino Caricchio")
@@ -976,7 +994,8 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
             "new york" -> listOf("Bellevue Hospital", "Escola pública de Nova York", "Delegacia do NYPD", "Centro Comunitário de Nova York", "Defesa Civil de Nova York", "NewYork-Presbyterian Hospital")
             else -> listOf("Hospital público de $nomeLocal", "Escola municipal de $nomeLocal", "Delegacia local de $nomeLocal", "Corpo de Bombeiros de $nomeLocal", "Centro Comunitário de $nomeLocal", "Defesa Civil de $nomeLocal")
         }
-        AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, nomesConhecidos[indice % nomesConhecidos.size], ponto.first, ponto.second)
+        val nomeAbrigo = nomesConhecidos[Math.floorMod(indice + seed, nomesConhecidos.size)]
+        AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, nomeAbrigo, ponto.first, ponto.second)
     }
 }
 
@@ -1366,7 +1385,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         when (local.nome.lowercase(Locale.ROOT)) {
             "mundo", "global", "world" -> {
                 val cidades = cidadesMundoDemo()
-                alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 2, "mapa-global", indice * 2) }.distinctBy { it.id }
+                alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 1, "mapa-global", indice) }.distinctBy { it.id }
                 abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 3, "abrigo-global") }.distinctBy { it.id }
             }
             "brasil", "brazil" -> {
