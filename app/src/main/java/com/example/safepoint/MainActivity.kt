@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.AlarmManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -164,6 +166,7 @@ class MainActivity : ComponentActivity() {
             Configuration.getInstance().osmdroidTileCache = ctx.getExternalFilesDir("osmdroid_tiles")
         } catch (_: Exception) {}
         auth = FirebaseAuth.getInstance(); db = FirebaseFirestore.getInstance()
+        agendarNotificacoesAutomaticas(this)
         setContent {
             MaterialTheme {
                 val navController = rememberNavController(); val context = LocalContext.current
@@ -182,7 +185,7 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Perfil.route) { TelaPerfil(navController, auth, db) }
                     composable(Screen.SOS.route) { TelaSOS(onVoltar = { navController.popBackStack() }) }
                     composable(Screen.Ajuda.route) { TelaAjudaComoUsar(onVoltar = { navController.popBackStack() }) }
-                    composable(Screen.Contribuir.route) { TelaContribuir(navController) }
+                    composable(Screen.Contribuir.route) { TelaContribuir(navController, auth) }
                     composable(Screen.Alertas.route) { TelaAlertas(navController) }
                 }
             }
@@ -402,12 +405,14 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
 }
 
 @Composable fun TelaPermissaoLocalizacao(onAceitar: () -> Unit, onRecusar: () -> Unit) {
+    var localizacaoAceita by remember { mutableStateOf(false) }
+    val notificacaoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (localizacaoAceita) onAceitar() else onRecusar() }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissoes ->
-        val permitida = permissoes[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissoes[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (permitida) onAceitar() else onRecusar()
+        localizacaoAceita = permissoes[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissoes[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (Build.VERSION.SDK_INT >= 33) notificacaoLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else if (localizacaoAceita) onAceitar() else onRecusar()
     }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(modifier = Modifier.height(24.dp)); Text("Permitir localização?", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Escolha se o SafePoint poderá usar a localização do aparelho para mostrar o mapa, calcular rotas e encontrar abrigos próximos.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center); Spacer(modifier = Modifier.height(32.dp)); Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Permitir Localização", color = Color.White, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(12.dp)); TextButton(onClick = onRecusar) { Text("Agora não", color = cinzaTexto) }
+        LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(modifier = Modifier.height(24.dp)); Text("Permissões do SafePoint", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Permita a localização para usar o mapa e receber avisos próximos. Em seguida, o Android perguntará se o SafePoint pode enviar notificações na tela do celular.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center); Spacer(modifier = Modifier.height(32.dp)); Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Permitir e continuar", color = Color.White, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(12.dp)); TextButton(onClick = { localizacaoAceita = false; if (Build.VERSION.SDK_INT >= 33) notificacaoLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else onRecusar() }) { Text("Agora não", color = cinzaTexto) }
     }
 }
 
@@ -512,6 +517,28 @@ val CORES_SEGURANCA = mapOf("hospital" to Color(0xFFD32F2F), "fire_station" to C
 
 
 private const val SAFEPOINT_NOTIFICATION_CHANNEL = "safepoint_alertas"
+private const val EMAIL_MODERADOR_SAFEPOINT = "gustavo.lopes.contact.br@gmail.com"
+
+class SafePointAtualizacaoReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        val avisos = listOf(
+            "Atualização do SafePoint" to "Confira as últimas novidades e melhorias disponíveis no aplicativo.",
+            "Alerta próximo" to "Abra o mapa para consultar os alertas e abrigos próximos da sua localização.",
+            "Relatos da comunidade" to "Existem atualizações recentes nos relatos analisados pelo SafePoint.",
+            "Abrigos disponíveis" to "Consulte as opções de abrigo e trace uma rota segura pelo mapa."
+        )
+        val aviso = avisos[(System.currentTimeMillis() / (6L * 60L * 60L * 1000L)).toInt() % avisos.size]
+        enviarNotificacaoSafePoint(context, aviso.first, aviso.second)
+    }
+}
+
+private fun agendarNotificacoesAutomaticas(context: Context) {
+    val alarme = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val intent = Intent(context, SafePointAtualizacaoReceiver::class.java)
+    val pending = PendingIntent.getBroadcast(context, 9042, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val primeiroAviso = System.currentTimeMillis() + 6L * 60L * 60L * 1000L
+    alarme.setInexactRepeating(AlarmManager.RTC_WAKEUP, primeiroAviso, 6L * 60L * 60L * 1000L, pending)
+}
 
 private fun criarCanalNotificacoesSafePoint(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -545,16 +572,28 @@ private fun enviarNotificacaoSafePoint(context: Context, titulo: String, texto: 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TelaContribuir(navController: NavController) {
+fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
     val context = LocalContext.current
+    val db = remember { FirebaseFirestore.getInstance() }
+    val usuario = auth.currentUser
+    val moderador = usuario?.email.equals(EMAIL_MODERADOR_SAFEPOINT, ignoreCase = true)
     var aba by remember { mutableStateOf(0) }
     var tipo by remember { mutableStateOf("Enchente") }
     var gravidade by remember { mutableStateOf("Média") }
     var local by remember { mutableStateOf("") }
     var descricao by remember { mutableStateOf("") }
     var mensagem by remember { mutableStateOf("") }
+    var relatosNuvem by remember { mutableStateOf<List<RelatoComunidade>>(emptyList()) }
     val tipos = listOf("Enchente", "Incêndio", "Tempestade", "Deslizamento", "Ciclone", "Terremoto")
     val gravidades = listOf("Baixa", "Média", "Alta", "Crítica")
+    DisposableEffect(Unit) {
+        val listener = db.collection("relatos_comunidade").addSnapshotListener { snapshot, _ ->
+            relatosNuvem = snapshot?.documents?.map { doc ->
+                RelatoComunidade(doc.id, doc.getString("tipo").orEmpty(), doc.getString("gravidade").orEmpty(), doc.getString("local").orEmpty(), doc.getString("descricao").orEmpty(), doc.getString("dataHora").orEmpty(), doc.getString("status") ?: "EM_ANALISE", doc.getString("autorEmail") ?: "Comunidade")
+            }?.sortedByDescending { it.dataHora } ?: emptyList()
+        }
+        onDispose { listener.remove() }
+    }
 
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }, containerColor = Color(0xFFF4F7FA)) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
@@ -567,7 +606,7 @@ fun TelaContribuir(navController: NavController) {
             }
             Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = aba == 0, onClick = { aba = 0 }, label = { Text("Novo relato") }, leadingIcon = { Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp)) })
-                FilterChip(selected = aba == 1, onClick = { aba = 1 }, label = { Text("Validação (${RelatosComunidadeStore.relatos.count { it.status == "Em análise" }})") }, leadingIcon = { Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(16.dp)) })
+                FilterChip(selected = aba == 1, onClick = { aba = 1 }, label = { Text("Validação (${relatosNuvem.count { it.status == "EM_ANALISE" }})") }, leadingIcon = { Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(16.dp)) })
             }
             if (aba == 0) {
                 Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -584,7 +623,10 @@ fun TelaContribuir(navController: NavController) {
                             descricaoLimpa.length < 15 -> "Descreva o ocorrido com pelo menos 15 caracteres."
                             else -> {
                                 val agora = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date())
-                                RelatosComunidadeStore.relatos.add(RelatoComunidade(UUID.randomUUID().toString(), tipo, gravidade, localLimpo, descricaoLimpa, agora))
+                                val relato = hashMapOf<String, Any>("tipo" to tipo, "gravidade" to gravidade, "local" to localLimpo, "descricao" to descricaoLimpa, "dataHora" to agora, "status" to "EM_ANALISE", "autorUid" to (usuario?.uid ?: ""), "autorEmail" to (usuario?.email ?: ""), "criadoEm" to com.google.firebase.firestore.FieldValue.serverTimestamp())
+                                db.collection("relatos_comunidade").add(relato).addOnSuccessListener {
+                                    db.collection("mail").add(mapOf("to" to listOf(EMAIL_MODERADOR_SAFEPOINT), "message" to mapOf("subject" to "Novo relato aguardando aprovação no SafePoint", "html" to "<h2>Novo relato comunitário</h2><p><b>Tipo:</b> $tipo</p><p><b>Gravidade:</b> $gravidade</p><p><b>Local:</b> $localLimpo</p><p>$descricaoLimpa</p><p>Abra o SafePoint para aprovar ou negar.</p>")))
+                                }.addOnFailureListener { erro -> mensagem = "Não foi possível salvar o relato: ${erro.localizedMessage ?: "erro do Firebase"}" }
                                 local = ""; descricao = ""
                                 "Relato enviado para análise. Ele só será divulgado após a validação."
                             }
@@ -596,16 +638,18 @@ fun TelaContribuir(navController: NavController) {
                 Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Triagem e validação", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0B2545))
                     Text("Cada relato passa por análise de completude e permanece oculto até ser aprovado.", color = Color(0xFF526172), fontSize = 11.sp)
-                    if (RelatosComunidadeStore.relatos.isEmpty()) Text("Nenhum relato aguardando análise.", color = Color.Gray, modifier = Modifier.padding(vertical = 20.dp))
-                    RelatosComunidadeStore.relatos.forEachIndexed { indice, relato ->
+                    if (!moderador) Text("A aprovação é restrita ao moderador responsável. Aqui você pode acompanhar os relatos publicados.", color = Color(0xFF526172), fontSize = 11.sp)
+                    val listaExibida = if (moderador) relatosNuvem.filter { it.status == "EM_ANALISE" } else relatosNuvem.filter { it.status == "APROVADO" }
+                    if (listaExibida.isEmpty()) Text(if (moderador) "Nenhum relato aguardando análise." else "Nenhum relato publicado ainda.", color = Color.Gray, modifier = Modifier.padding(vertical = 20.dp))
+                    listaExibida.forEach { relato ->
                         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) { Text("${relato.tipo} • ${relato.local}", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Color(0xFF0B2545)); Text(relato.status, color = if (relato.status == "Publicado") Color(0xFF2E7D32) else Color(0xFFB26A00), fontSize = 10.sp) }
+                                Row(verticalAlignment = Alignment.CenterVertically) { Text("${relato.tipo} • ${relato.local}", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Color(0xFF0B2545)); Text(if (relato.status == "APROVADO") "Publicado" else "Em análise", color = if (relato.status == "APROVADO") Color(0xFF2E7D32) else Color(0xFFB26A00), fontSize = 10.sp) }
                                 Text("${relato.gravidade} • ${relato.dataHora}", color = Color(0xFF64748B), fontSize = 10.sp)
                                 Text(relato.descricao, color = Color(0xFF334155), fontSize = 11.sp)
-                                if (relato.status == "Em análise") Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                                    OutlinedButton(onClick = { RelatosComunidadeStore.relatos[indice] = relato.copy(status = "Não aprovado") }) { Text("Reprovar", fontSize = 10.sp) }
-                                    Button(onClick = { RelatosComunidadeStore.relatos[indice] = relato.copy(status = "Publicado"); enviarNotificacaoSafePoint(context, "Relato validado", "Um relato de ${relato.tipo.lowercase(Locale.ROOT)} em ${relato.local} foi aprovado.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Aprovar", fontSize = 10.sp) }
+                                if (moderador && relato.status == "EM_ANALISE") Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                    OutlinedButton(onClick = { db.collection("relatos_comunidade").document(relato.id).update("status", "NEGADO", "moderadoPor", EMAIL_MODERADOR_SAFEPOINT) }) { Text("Negar", fontSize = 10.sp) }
+                                    Button(onClick = { db.collection("relatos_comunidade").document(relato.id).update("status", "APROVADO", "moderadoPor", EMAIL_MODERADOR_SAFEPOINT, "aprovadoEm", com.google.firebase.firestore.FieldValue.serverTimestamp()); enviarNotificacaoSafePoint(context, "Relato validado", "Um relato de ${relato.tipo.lowercase(Locale.ROOT)} em ${relato.local} foi aprovado.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Aprovar", fontSize = 10.sp) }
                                 }
                             }
                         }
@@ -758,7 +802,15 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
         val raioMetros = if (total == 1) 900.0 else 3500.0 + indice * 2500.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
-        AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, "Abrigo ${indice + 1}", ponto.first, ponto.second)
+        val nomesConhecidos = when (SafePointDemoData.normalizar(local.nome)) {
+            "sao paulo" -> listOf("Hospital das Clínicas", "Hospital Municipal Dr. Cármino Caricchio", "Escola Estadual São Paulo", "3º Distrito Policial")
+            "rio de janeiro" -> listOf("Hospital Municipal Souza Aguiar", "Hospital Municipal Miguel Couto", "Escola Municipal do Rio", "17ª Delegacia de Polícia")
+            "brasilia" -> listOf("Hospital de Base do Distrito Federal", "Hospital Regional da Asa Norte", "Escola Classe de Brasília", "Delegacia da área")
+            "london" -> listOf("Hospital St Thomas", "University College Hospital", "Escola pública de Londres", "Delegacia da Metropolitan Police")
+            "new york" -> listOf("Bellevue Hospital", "NewYork-Presbyterian Hospital", "Escola pública de Nova York", "Delegacia do NYPD")
+            else -> listOf("Hospital público de $nomeLocal", "Escola pública de $nomeLocal", "Delegacia local de $nomeLocal", "Corpo de Bombeiros de $nomeLocal")
+        }
+        AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, nomesConhecidos[indice % nomesConhecidos.size], ponto.first, ponto.second)
     }
 }
 
@@ -1165,6 +1217,16 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         abrigosDoMapa = abrigos
         avisoBusca = "${alertas.size} alertas • ${abrigos.size} abrigos"
         mapView.invalidate()
+        if (local.nome.lowercase(Locale.ROOT) !in listOf("mundo", "global", "world", "brasil", "brazil")) {
+            scope.launch {
+                val locaisReais = runCatching { OverpassRepository.buscarLocaisDeApoio(local.lat, local.lng, 5000) }.getOrDefault(emptyList())
+                if (locaisReais.isNotEmpty() && cidadeSelecionada == local) {
+                    abrigosDoMapa = locaisReais
+                    avisoBusca = "${alertas.size} alertas • ${locaisReais.size} locais de apoio identificados"
+                    mapView.invalidate()
+                }
+            }
+        }
     }
 
     fun aplicarLocal(local: CidadeDemo, zoom: Double = 13.0, pesquisado: Boolean = true) {
@@ -1358,9 +1420,10 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             cubicTo(cx + raio, tamanho * 0.10f, cx + raio * 1.35f, tamanho * 0.42f, cx, tamanho * 0.94f)
             close()
         }
-        val branco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+        val branco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL; setShadowLayer(4f, 0f, 2f, android.graphics.Color.argb(150, 0, 0, 0)) }
         canvas.drawPath(gota(tamanho * 0.38f), branco)
         branco.color = android.graphics.Color.rgb((cor.red * 255).toInt(), (cor.green * 255).toInt(), (cor.blue * 255).toInt())
+        branco.clearShadowLayer()
         canvas.drawPath(gota(tamanho * 0.30f), branco)
         return BitmapDrawable(context.resources, bitmap)
     }
@@ -1376,7 +1439,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             cubicTo(cx + 17f, 6f, cx + 22f, tamanho * 0.42f, cx, tamanho * 0.94f)
             close()
         }
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(30, 136, 77); style = Paint.Style.FILL }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(30, 136, 77); style = Paint.Style.FILL; setShadowLayer(4f, 0f, 2f, android.graphics.Color.argb(160, 0, 0, 0)) }
         canvas.drawPath(gota, paint)
         paint.color = android.graphics.Color.WHITE
         paint.style = Paint.Style.STROKE
