@@ -232,8 +232,11 @@ class MainActivity : ComponentActivity() {
                 val notificacoesDecidida = PrefsHelper.isNotificacoesDecidida(context)
                 val startDest = when { !termosAceitos -> Screen.Termos.route; !locDecidida -> Screen.PermissaoLocalizacao.route; !notificacoesDecidida -> Screen.PermissaoNotificacoes.route; currentUser == null -> Screen.Login.route; else -> Screen.Home.route }
                 val densidadeAtual = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(densidadeAtual.density, if (textoMaior) 1.18f else densidadeAtual.fontScale)) {
-                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else Color.Transparent)) {
+                CompositionLocalProvider(
+                    LocalDensity provides Density(densidadeAtual.density, if (textoMaior) 1.18f else densidadeAtual.fontScale),
+                    LocalTextStyle provides LocalTextStyle.current.copy(letterSpacing = if (leituraFacilitada) 0.6.sp else LocalTextStyle.current.letterSpacing)
+                ) {
+                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFFFFBF0) else Color.Transparent)) {
                 NavHost(navController = navController, startDestination = startDest) {
                     composable(Screen.Termos.route) { TelaTermosUso(onAceitar = { PrefsHelper.setTermosAceitos(context, true); navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } } }) }
                     composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }) }
@@ -488,20 +491,17 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
 
 @Composable
 fun TelaPermissaoNotificacoes(onContinuar: () -> Unit) {
-    val context = LocalContext.current
-    val permitidas = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    val notificacaoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onContinuar() }
+    fun pedirNotificacao() { if (Build.VERSION.SDK_INT >= 33) notificacaoLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else onContinuar() }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(Modifier.height(24.dp))
         Text("Permissão de notificações", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro)
         Spacer(Modifier.height(12.dp))
-        Text("Agora permita que o SafePoint envie atualizações do aplicativo e alertas importantes na tela do seu celular. Esta etapa é separada da localização.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center)
+        Text("Permita que o SafePoint envie atualizações do aplicativo e alertas importantes na tela do seu celular.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center)
         Spacer(Modifier.height(28.dp))
-        Button(onClick = { abrirConfiguracoesNotificacoes(context) }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = azulEscuro)) { Icon(Icons.Default.NotificationsActive, null); Spacer(Modifier.width(8.dp)); Text(if (permitidas) "Notificações já permitidas" else "Permitir nas configurações") }
+        Button(onClick = { pedirNotificacao() }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = azulEscuro)) { Icon(Icons.Default.NotificationsActive, null); Spacer(Modifier.width(8.dp)); Text("Permitir notificações") }
         Spacer(Modifier.height(12.dp))
-        Text("Na tela do Android, ative a opção Permitir notificações e volte ao SafePoint.", fontSize = 11.sp, color = cinzaTexto, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(20.dp))
-        TextButton(onClick = onContinuar) { Text("Continuar sem notificações", color = cinzaTexto) }
-        Button(onClick = onContinuar, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Concluir configuração") }
+        TextButton(onClick = onContinuar) { Text("Agora não", color = cinzaTexto) }
     }
 }
 
@@ -614,9 +614,21 @@ class SafePointAtualizacaoReceiver : BroadcastReceiver() {
             "Atualização do SafePoint" to "Confira as últimas novidades e melhorias disponíveis no aplicativo.",
             "Alerta próximo" to "Abra o mapa para consultar os alertas e abrigos próximos da sua localização.",
             "Relatos da comunidade" to "Existem atualizações recentes nos relatos analisados pelo SafePoint.",
-            "Abrigos disponíveis" to "Consulte as opções de abrigo e trace uma rota segura pelo mapa."
+            "Abrigos disponíveis" to "Consulte as opções de abrigo e trace uma rota segura pelo mapa.",
+            "Mapa atualizado" to "Novas informações de alertas e pontos de apoio foram atualizadas.",
+            "Segurança no trajeto" to "Confira as condições do caminho antes de sair e mantenha-se atento.",
+            "Novo ponto de apoio" to "Há locais de apoio diferentes disponíveis no mapa do SafePoint.",
+            "Informação importante" to "Consulte as orientações oficiais antes de tomar decisões de emergência.",
+            "Histórico atualizado" to "Seu histórico de alertas recebeu novas informações.",
+            "SafePoint" to "Abra o aplicativo para ver as novidades e atualizações recentes."
         )
-        val aviso = avisos[(System.currentTimeMillis() / (6L * 60L * 60L * 1000L)).toInt() % avisos.size]
+        val prefs = context.getSharedPreferences("safepoint_notificacoes", Context.MODE_PRIVATE)
+        val hoje = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val dataSalva = prefs.getString("data", "")
+        val quantidade = if (dataSalva == hoje) prefs.getInt("quantidade", 0) else 0
+        if (quantidade >= 10) return
+        prefs.edit().putString("data", hoje).putInt("quantidade", quantidade + 1).apply()
+        val aviso = avisos[quantidade % avisos.size]
         enviarNotificacaoSafePoint(context, aviso.first, aviso.second)
     }
 }
@@ -625,8 +637,8 @@ private fun agendarNotificacoesAutomaticas(context: Context) {
     val alarme = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     val intent = Intent(context, SafePointAtualizacaoReceiver::class.java)
     val pending = PendingIntent.getBroadcast(context, 9042, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-    val primeiroAviso = System.currentTimeMillis() + 6L * 60L * 60L * 1000L
-    alarme.setInexactRepeating(AlarmManager.RTC_WAKEUP, primeiroAviso, 6L * 60L * 60L * 1000L, pending)
+    val primeiroAviso = System.currentTimeMillis() + 2L * 60L * 60L * 1000L
+    alarme.setInexactRepeating(AlarmManager.RTC_WAKEUP, primeiroAviso, 2L * 60L * 60L * 1000L, pending)
 }
 
 private fun criarCanalNotificacoesSafePoint(context: Context) {
@@ -1318,12 +1330,12 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             "mundo", "global", "world" -> {
                 val cidades = cidadesMundoDemo()
                 alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 2, "mapa-global", indice * 2) }.distinctBy { it.id }
-                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 1, "abrigo-global") }.distinctBy { it.id }
+                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 4, "abrigo-global") }.distinctBy { it.id }
             }
             "brasil", "brazil" -> {
                 val cidades = cidadesBrasilDemo()
                 alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 1, "mapa-brasil", indice) }.distinctBy { it.id }
-                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 1, "abrigo-brasil") }.distinctBy { it.id }
+                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 4, "abrigo-brasil") }.distinctBy { it.id }
             }
             else -> {
                 alertas = criarAlertasDemonstrativos(local, 8, "mapa-local").distinctBy { it.id }
@@ -1338,8 +1350,9 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             scope.launch {
                 val locaisReais = runCatching { OverpassRepository.buscarLocaisDeApoio(local.lat, local.lng, 5000) }.getOrDefault(emptyList())
                 if (locaisReais.isNotEmpty() && cidadeSelecionada == local) {
-                    abrigosDoMapa = locaisReais
-                    avisoBusca = "${alertas.size} alertas • ${locaisReais.size} locais de apoio identificados"
+                    val gerados = criarAbrigosDemonstrativos(local, 6, "abrigo-complementar")
+                    abrigosDoMapa = (locaisReais + gerados).distinctBy { "${it.nome}-${"%.3f".format(Locale.US, it.lat)}-${"%.3f".format(Locale.US, it.lng)}" }
+                    avisoBusca = "${alertas.size} alertas • ${abrigosDoMapa.size} locais de apoio identificados"
                     mapView.invalidate()
                 }
             }
@@ -1537,7 +1550,7 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             cubicTo(cx + raio, tamanho * 0.10f, cx + raio * 1.35f, tamanho * 0.42f, cx, tamanho * 0.94f)
             close()
         }
-        val branco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL; setShadowLayer(4f, 0f, 2f, android.graphics.Color.argb(150, 0, 0, 0)) }
+        val branco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL; setShadowLayer(6f, 0f, 3f, android.graphics.Color.argb(170, 0, 0, 0)) }
         canvas.drawPath(gota(tamanho * 0.38f), branco)
         branco.color = android.graphics.Color.rgb((cor.red * 255).toInt(), (cor.green * 255).toInt(), (cor.blue * 255).toInt())
         branco.clearShadowLayer()
@@ -1562,10 +1575,10 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         canvas.drawPath(gota, paint)
         paint.color = android.graphics.Color.WHITE
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 6f
+        paint.strokeWidth = 4f
         paint.strokeCap = Paint.Cap.ROUND
-        canvas.drawLine(cx - 10f, cx, cx + 10f, cx, paint)
-        canvas.drawLine(cx, cx - 10f, cx, cx + 10f, paint)
+        canvas.drawLine(cx - 7f, cx, cx + 7f, cx, paint)
+        canvas.drawLine(cx, cx - 7f, cx, cx + 7f, paint)
         paint.style = Paint.Style.FILL
         canvas.drawCircle(cx, cx, 3.5f, paint)
         return BitmapDrawable(context.resources, bitmap)
@@ -1576,9 +1589,9 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
         val bitmap = Bitmap.createBitmap(tamanho, tamanho, Bitmap.Config.ARGB_8888)
         val canvas = AndroidCanvas(bitmap)
         val cx = tamanho / 2f
-        val branco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
+        val branco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL; setShadowLayer(7f, 0f, 3f, android.graphics.Color.argb(170, 0, 0, 0)) }
         canvas.drawCircle(cx, cx, tamanho * 0.46f, branco)
-        val azul = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(25, 118, 210); style = Paint.Style.FILL }
+        val azul = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(25, 118, 210); style = Paint.Style.FILL; setShadowLayer(5f, 0f, 2f, android.graphics.Color.argb(180, 0, 0, 0)) }
         val seta = AndroidPath().apply {
             moveTo(cx, 7f)
             lineTo(tamanho * 0.82f, tamanho * 0.82f)
