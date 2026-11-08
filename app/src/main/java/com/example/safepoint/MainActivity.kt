@@ -29,6 +29,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -61,6 +62,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -134,7 +136,7 @@ data class Ocorrencia(val titulo: String, val endereco: String, val lat: Double,
 data class RelatoComunidade(val id: String, val tipo: String, val gravidade: String, val local: String, val descricao: String, val dataHora: String, var status: String = "EM_ANALISE", val autor: String = "Comunidade", val fotoUrl: String = "", val aprovadoPor: String = "", val publicadoEm: String = "")
 enum class TipoOcorrencia { SAIDA, MONITOR, DESASTRE, SEGURANCA }
 sealed class Screen(val route: String) {
-    object Termos : Screen("termos"); object PermissaoLocalizacao : Screen("permissao_localizacao"); object Login : Screen("login"); object Cadastro : Screen("cadastro"); object RecuperarSenha : Screen("recuperar_senha"); object Home : Screen("home"); object Mapa : Screen("mapa"); object Historico : Screen("historico"); object Perfil : Screen("perfil"); object SOS : Screen("sos"); object Ajuda : Screen("ajuda"); object Contribuir : Screen("contribuir"); object Alertas : Screen("alertas")
+    object Termos : Screen("termos"); object PermissaoLocalizacao : Screen("permissao_localizacao"); object PermissaoNotificacoes : Screen("permissao_notificacoes"); object Login : Screen("login"); object Cadastro : Screen("cadastro"); object RecuperarSenha : Screen("recuperar_senha"); object Home : Screen("home"); object Mapa : Screen("mapa"); object Historico : Screen("historico"); object Perfil : Screen("perfil"); object SOS : Screen("sos"); object Ajuda : Screen("ajuda"); object Contribuir : Screen("contribuir"); object Alertas : Screen("alertas")
 }
 object RelatosComunidadeStore { val relatos = mutableStateListOf<RelatoComunidade>() }
 object NotificacoesSafePointStore { val itens = mutableStateListOf<Pair<String, String>>() }
@@ -151,6 +153,8 @@ object PrefsHelper {
     fun setLocalizacaoDecidida(context: Context, decidida: Boolean) { getPrefs(context).edit().putBoolean("loc_decidida", decidida).apply() }
     fun isFotosDecidida(context: Context): Boolean = getPrefs(context).getBoolean("fotos_decidida", false)
     fun setFotosDecidida(context: Context, decidida: Boolean) { getPrefs(context).edit().putBoolean("fotos_decidida", decidida).apply() }
+    fun isNotificacoesDecidida(context: Context): Boolean = getPrefs(context).getBoolean("notificacoes_decidida", false)
+    fun setNotificacoesDecidida(context: Context, decidida: Boolean) { getPrefs(context).edit().putBoolean("notificacoes_decidida", decidida).apply() }
 }
 
 private fun comprimirImagemParaFirestore(context: Context, uri: Uri): String? = try {
@@ -168,6 +172,22 @@ private fun comprimirImagemParaFirestore(context: Context, uri: Uri): String? = 
     original.recycle()
     "data:image/jpeg;base64," + Base64.encodeToString(saida.toByteArray(), Base64.NO_WRAP)
 } catch (_: Exception) { null }
+
+@Composable
+private fun FotoFirestore(valor: String, descricao: String, modifier: Modifier, contentScale: ContentScale = ContentScale.Crop) {
+    if (!valor.startsWith("data:image")) {
+        AsyncImage(model = valor, contentDescription = descricao, modifier = modifier, contentScale = contentScale)
+        return
+    }
+    val bitmap = remember(valor) {
+        try {
+            val base64 = valor.substringAfter("base64,", "")
+            BitmapFactory.decodeByteArray(Base64.decode(base64, Base64.DEFAULT), 0, Base64.decode(base64, Base64.DEFAULT).size)
+        } catch (_: Exception) { null }
+    }
+    if (bitmap != null) Image(bitmap = bitmap.asImageBitmap(), contentDescription = descricao, modifier = modifier, contentScale = contentScale)
+    else Icon(Icons.Default.BrokenImage, contentDescription = "Imagem indisponível", modifier = modifier)
+}
 
 private fun abrirConfiguracoesNotificacoes(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -204,15 +224,20 @@ class MainActivity : ComponentActivity() {
                 var acessibilidadeAberta by remember { mutableStateOf(false) }
                 var textoMaior by remember { mutableStateOf(false) }
                 var altoContraste by remember { mutableStateOf(false) }
+                var reduzirMovimento by remember { mutableStateOf(false) }
+                var leituraFacilitada by remember { mutableStateOf(false) }
+                var coresDiferenciadas by remember { mutableStateOf(false) }
                 val termosAceitos = PrefsHelper.isTermosAceitos(context); val currentUser = auth.currentUser
                 val locDecidida = PrefsHelper.isLocalizacaoDecidida(context)
-                val startDest = when { !termosAceitos -> Screen.Termos.route; !locDecidida -> Screen.PermissaoLocalizacao.route; currentUser == null -> Screen.Login.route; else -> Screen.Home.route }
+                val notificacoesDecidida = PrefsHelper.isNotificacoesDecidida(context)
+                val startDest = when { !termosAceitos -> Screen.Termos.route; !locDecidida -> Screen.PermissaoLocalizacao.route; !notificacoesDecidida -> Screen.PermissaoNotificacoes.route; currentUser == null -> Screen.Login.route; else -> Screen.Home.route }
                 val densidadeAtual = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(densidadeAtual.density, if (textoMaior) 1.18f else densidadeAtual.fontScale)) {
                 Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else Color.Transparent)) {
                 NavHost(navController = navController, startDestination = startDest) {
                     composable(Screen.Termos.route) { TelaTermosUso(onAceitar = { PrefsHelper.setTermosAceitos(context, true); navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } } }) }
-                    composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }) }
+                    composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }) }
+                    composable(Screen.PermissaoNotificacoes.route) { TelaPermissaoNotificacoes(onContinuar = { PrefsHelper.setNotificacoesDecidida(context, true); if (auth.currentUser != null) navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } } else navController.navigate(Screen.Login.route) { popUpTo(0) { inclusive = true } } }) }
                     composable(Screen.Login.route) { TelaLoginOriginal(navController, auth) }
                     composable(Screen.Cadastro.route) { TelaCadastroEscudoOriginal(navController, auth) }
                     composable(Screen.RecuperarSenha.route) { TelaRecuperarSenhaOriginal(navController, auth) }
@@ -225,11 +250,14 @@ class MainActivity : ComponentActivity() {
                     composable(Screen.Contribuir.route) { TelaContribuir(navController, auth) }
                     composable(Screen.Alertas.route) { TelaAlertas(navController) }
                 }
-                SmallFloatingActionButton(onClick = { acessibilidadeAberta = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 76.dp).semantics { contentDescription = "Abrir opções de acessibilidade" }, containerColor = if (altoContraste) Color.Yellow else azulEscuro) { Icon(Icons.Default.Accessibility, "Acessibilidade", tint = if (altoContraste) Color.Black else Color.White) }
+                SmallFloatingActionButton(onClick = { acessibilidadeAberta = true }, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 10.dp, end = 14.dp).semantics { contentDescription = "Abrir opções de acessibilidade" }, containerColor = if (altoContraste) Color.Yellow else azulEscuro) { Icon(Icons.Default.Accessibility, "Acessibilidade", tint = if (altoContraste) Color.Black else Color.White) }
                 if (acessibilidadeAberta) AlertDialog(onDismissRequest = { acessibilidadeAberta = false }, title = { Text("Acessibilidade") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Ajuste a leitura do SafePoint para suas necessidades.")
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Texto maior"); Switch(checked = textoMaior, onCheckedChange = { textoMaior = it }) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Alto contraste"); Switch(checked = altoContraste, onCheckedChange = { altoContraste = it }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Reduzir movimentos"); Switch(checked = reduzirMovimento, onCheckedChange = { reduzirMovimento = it }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Leitura facilitada"); Switch(checked = leituraFacilitada, onCheckedChange = { leituraFacilitada = it }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Cores diferenciadas"); Switch(checked = coresDiferenciadas, onCheckedChange = { coresDiferenciadas = it }) }
                 } }, confirmButton = { TextButton(onClick = { acessibilidadeAberta = false }) { Text("Fechar") } })
                 }
                 }
@@ -450,14 +478,30 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
 }
 
 @Composable fun TelaPermissaoLocalizacao(onAceitar: () -> Unit, onRecusar: () -> Unit) {
-    val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissoes ->
-        val aceitou = permissoes[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissoes[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (aceitou) abrirConfiguracoesNotificacoes(context)
         onAceitar()
     }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(modifier = Modifier.height(24.dp)); Text("Permissão de localização", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro); Spacer(modifier = Modifier.height(12.dp)); Text("Permita a localização para usar o mapa e receber alertas próximos. Depois, você poderá ativar as notificações separadamente nas configurações do celular.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center); Spacer(modifier = Modifier.height(32.dp)); Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(10.dp)).background(gradientBotaoOriginal).clickable { launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) { Text("Permitir localização", color = Color.White, fontWeight = FontWeight.Bold) }; Spacer(modifier = Modifier.height(12.dp)); TextButton(onClick = onRecusar) { Text("Agora não", color = cinzaTexto) }
+    }
+}
+
+@Composable
+fun TelaPermissaoNotificacoes(onContinuar: () -> Unit) {
+    val context = LocalContext.current
+    val permitidas = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    Column(modifier = Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(Modifier.height(24.dp))
+        Text("Permissão de notificações", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro)
+        Spacer(Modifier.height(12.dp))
+        Text("Agora permita que o SafePoint envie atualizações do aplicativo e alertas importantes na tela do seu celular. Esta etapa é separada da localização.", fontSize = 14.sp, color = cinzaTexto, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(28.dp))
+        Button(onClick = { abrirConfiguracoesNotificacoes(context) }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = azulEscuro)) { Icon(Icons.Default.NotificationsActive, null); Spacer(Modifier.width(8.dp)); Text(if (permitidas) "Notificações já permitidas" else "Permitir nas configurações") }
+        Spacer(Modifier.height(12.dp))
+        Text("Na tela do Android, ative a opção Permitir notificações e volte ao SafePoint.", fontSize = 11.sp, color = cinzaTexto, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(20.dp))
+        TextButton(onClick = onContinuar) { Text("Continuar sem notificações", color = cinzaTexto) }
+        Button(onClick = onContinuar, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Concluir configuração") }
     }
 }
 
@@ -474,10 +518,10 @@ fun TelaTermosUso(onAceitar: () -> Unit) {
                 Text("1. OBJETIVO E ACEITAÇÃO", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O SafePoint oferece um mapa de ruas com dados cartográficos abertos, pesquisa de localidades e alertas consultados em fontes públicas. Os alertas dependem da disponibilidade e cobertura das fontes e não substituem serviços oficiais de emergência. Ao criar uma conta e utilizar o aplicativo, você declara ter lido, compreendido e concordado com estes Termos de Uso e Política de Privacidade.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("2. CADASTRO E RESPONSABILIDADE", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Você se compromete a fornecer dados verídicos, completos e atualizados no cadastro (nome, e-mail, telefone, data de nascimento). É responsável por manter a confidencialidade de sua senha e por todas as atividades realizadas em sua conta.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("3. LOCALIZAÇÃO EXATA - CONSENTIMENTO EXPRESSO", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("A localização do aparelho é opcional e só é consultada após a autorização do sistema. Quando você pesquisa endereços, consulta locais de apoio ou solicita rotas, as coordenadas ou termos de pesquisa podem ser enviados aos serviços cartográficos públicos necessários para responder ao pedido. Recursos de conta e perfil podem continuar usando os serviços Firebase descritos nesta política.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
-                Text("4. MAPA REAL PROFISSIONAL - TECNOLOGIA SEM 403", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O mapa usa tiles públicos do OpenStreetMap. A disponibilidade depende da conexão e do provedor de mapas.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
-                Text("5. FIREBASE, ARMAZENAMENTO E SEGURANÇA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Usamos Firebase Authentication para login seguro, Firestore para perfil e histórico, e Firebase Storage para fotos de perfil. As fotos são armazenadas em fotos_perfil/{userId}/profile.jpg com regras que permitem apenas o dono ler/escrever. Caso o bucket não exista ou haja erro 'Object does not exist at location', o app salva apenas dados de texto e informa o usuário.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
-                Text("6. BOTÃO SOS E EMERGÊNCIA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O botão SOS facilita ligação rápida para 190 (Polícia), 192 (SAMU), 193 (Bombeiros) e compartilhamento de localização via WhatsApp. O SafePoint é ferramenta de apoio e NÃO substitui serviços oficiais de emergência.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
-                Text("7. HISTÓRICO DE ALERTAS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O histórico consulta eventos publicados por fontes públicas, incluindo GDACS, quando disponíveis. A cobertura pode ser incompleta e não representa todos os incidentes locais. Confirme orientações com a Defesa Civil e serviços de emergência.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
+                Text("4. USO SEGURO DO MAPA E DAS ROTAS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Use o mapa, os alertas, os abrigos e as rotas como informações de apoio. Observe o ambiente, não utilize o aplicativo enquanto dirige e confirme as condições das vias antes de se deslocar.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
+                Text("5. RELATOS DA COMUNIDADE", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Relatos enviados pela comunidade passam por análise antes da publicação. Não envie conteúdo falso, ofensivo, ilegal ou que exponha indevidamente pessoas. Fotos e descrições devem estar relacionadas ao ocorrido informado.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
+                Text("6. NOTIFICAÇÕES E COMUNICAÇÕES", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("As notificações são opcionais e dependem da autorização do sistema e da conexão disponível. Você pode ativá-las ou desativá-las nas configurações do celular. O SafePoint não garante entrega imediata de todos os avisos.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
+                Text("7. ACESSIBILIDADE E SERVIÇOS DE EMERGÊNCIA", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("O aplicativo oferece recursos de acessibilidade para facilitar a leitura e a navegação. O botão SOS facilita ligações para serviços oficiais, mas o SafePoint não substitui Polícia, SAMU, Bombeiros, Defesa Civil ou outras autoridades.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
                 Text("8. PRIVACIDADE E LGPD", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = azulEscuro); Text("Conforme LGPD (Lei 13.709/2018), você tem direito a acessar, corrigir, excluir e portar seus dados. Coletamos apenas dados essenciais. Não compartilhamos dados com anunciantes.", fontSize = 11.sp, color = Color.DarkGray, lineHeight = 15.sp)
             }
         }
@@ -722,11 +766,11 @@ fun TelaContribuir(navController: NavController, auth: FirebaseAuth) {
                                 Row(verticalAlignment = Alignment.CenterVertically) { Text("${relato.tipo} • ${relato.local}", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Color(0xFF0B2545)); Text(if (relato.status == "APROVADO") "Publicado" else "Em análise", color = if (relato.status == "APROVADO") Color(0xFF2E7D32) else Color(0xFFB26A00), fontSize = 10.sp) }
                                 Text("${relato.gravidade} • ${relato.dataHora}", color = Color(0xFF64748B), fontSize = 10.sp)
                                 Text(relato.descricao, color = Color(0xFF334155), fontSize = 11.sp)
-                                if (relato.fotoUrl.isNotBlank()) AsyncImage(model = relato.fotoUrl, contentDescription = "Foto do relato", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
-                                if (relato.status == "APROVADO") Text("Aprovado por ${relato.aprovadoPor.ifBlank { "moderador do SafePoint" }}${if (relato.publicadoEm.isNotBlank()) " • publicado em ${relato.publicadoEm}" else ""}", color = Color(0xFF2E7D32), fontSize = 10.sp)
+                                if (relato.fotoUrl.isNotBlank()) FotoFirestore(relato.fotoUrl, "Foto do relato", Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(10.dp)))
+                                if (relato.status == "APROVADO") Text("Aprovado por Moderador do SafePoint${if (relato.publicadoEm.isNotBlank()) " • publicado em ${relato.publicadoEm}" else ""}", color = Color(0xFF2E7D32), fontSize = 10.sp)
                                 if (moderador && relato.status == "EM_ANALISE") Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                     OutlinedButton(onClick = { db.collection("relatos_comunidade").document(relato.id).update("status", "NEGADO", "moderadoPor", EMAIL_MODERADOR_SAFEPOINT) }) { Text("Negar", fontSize = 10.sp) }
-                                    Button(onClick = { val agora = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date()); db.collection("relatos_comunidade").document(relato.id).update("status", "APROVADO", "aprovadoPor", EMAIL_MODERADOR_SAFEPOINT, "publicadoPor", EMAIL_MODERADOR_SAFEPOINT, "publicadoEm", agora, "aprovadoEm", com.google.firebase.firestore.FieldValue.serverTimestamp()); enviarNotificacaoSafePoint(context, "Relato validado", "Um relato de ${relato.tipo.lowercase(Locale.ROOT)} em ${relato.local} foi aprovado.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Aprovar", fontSize = 10.sp) }
+                                    Button(onClick = { val agora = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date()); db.collection("relatos_comunidade").document(relato.id).update("status", "APROVADO", "aprovadoPor", "Moderador do SafePoint", "publicadoPor", "Moderador do SafePoint", "publicadoEm", agora, "aprovadoEm", com.google.firebase.firestore.FieldValue.serverTimestamp()); enviarNotificacaoSafePoint(context, "Relato validado", "Um relato de ${relato.tipo.lowercase(Locale.ROOT)} em ${relato.local} foi aprovado.") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845F))) { Text("Aprovar", fontSize = 10.sp) }
                                 }
                                 if (moderador) OutlinedButton(onClick = { db.collection("relatos_comunidade").document(relato.id).delete() }) { Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Excluir relato", fontSize = 10.sp) }
                             }
@@ -847,7 +891,7 @@ private fun criarAlertasDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
         val tipo = tiposPermitidos[tipoIndice]
         val gravidade = GRAVIDADES_DEMONSTRACAO[Math.floorMod(seed + indice, GRAVIDADES_DEMONSTRACAO.size)]
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 2500.0 else 2500.0 + indice * 2200.0
+        val raioMetros = if (total == 1) 5000.0 else 5000.0 + indice * 5000.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val descricao = when (tipo) {
             "Enchente" -> "Alagamento localizado após chuva intensa na região."
@@ -873,7 +917,7 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     val anguloInicial = Math.floorMod(seed + 210, 360).toDouble() * Math.PI / 180.0
     return (0 until total).map { indice ->
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 12000.0 else 12000.0 + indice * 6500.0
+        val raioMetros = if (total == 1) 22000.0 else 22000.0 + indice * 9000.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val nomesConhecidos = when (SafePointDemoData.normalizar(local.nome)) {
             "sao paulo" -> listOf("Hospital das Clínicas", "Hospital Municipal Dr. Cármino Caricchio", "Escola Estadual São Paulo", "3º Distrito Policial", "Centro Comunitário Sé", "Defesa Civil de São Paulo")
@@ -2381,7 +2425,8 @@ fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> U
     }
     fun escolherFotoPerfil() { if (PrefsHelper.isFotosDecidida(context)) imagePickerLauncher.launch("image/*") else fotoPermissaoLauncher.launch(fotoPermissao) }
     LaunchedEffect(Unit) { val userId = auth.currentUser?.uid ?: PrefsHelper.getUserId(context); if (userId != null) db.collection("usuarios").document(userId).get().addOnSuccessListener { doc -> nome = doc.getString("nome") ?: ""; email = doc.getString("email") ?: auth.currentUser?.email ?: ""; telefone = doc.getString("telefone") ?: ""; dataNascimento = doc.getString("dataNascimento") ?: ""; fotoUrlSalva = doc.getString("fotoUrl"); carregando = false }.addOnFailureListener { carregando = false } else carregando = false }
-    if (mostrarDatePicker) { val datePickerState = rememberDatePickerState(); DatePickerDialog(onDismissRequest = { mostrarDatePicker = false }, confirmButton = { TextButton(onClick = { val millis = datePickerState.selectedDateMillis; if (millis != null) { val cal = Calendar.getInstance(); cal.timeInMillis = millis; dataNascimento = String.format("%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)) }; mostrarDatePicker = false }) { Text("OK") } }, dismissButton = { TextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") } }) { DatePicker(state = datePickerState) } }
+    val datePickerState = rememberDatePickerState()
+    if (mostrarDatePicker) { DatePickerDialog(onDismissRequest = { mostrarDatePicker = false }, confirmButton = { TextButton(onClick = { val millis = datePickerState.selectedDateMillis; if (millis != null) { val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")); cal.timeInMillis = millis; dataNascimento = String.format("%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR)) }; mostrarDatePicker = false }) { Text("OK") } }, dismissButton = { TextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") } }) { DatePicker(state = datePickerState) } }
     Scaffold(bottomBar = { BarraNavegacaoInferior(navController) }) { paddingValues ->
         if (carregando) Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = azulEscuro) }
         else {
@@ -2389,7 +2434,9 @@ fun obterLocalizacao(context: Context, onLocationReceived: (Double, Double) -> U
                 Box(modifier = Modifier.fillMaxWidth().background(FundoGradiente).statusBarsPadding().padding(24.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 12.dp)) {
                         Box(modifier = Modifier.size(120.dp).clip(CircleShape).background(Color.White).clickable { escolherFotoPerfil() }, contentAlignment = Alignment.Center) {
-                            val img = fotoUriLocal?.toString() ?: fotoUrlSalva; if (!img.isNullOrBlank()) AsyncImage(model = img, contentDescription = "Foto", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop) else Icon(Icons.Default.Person, null, tint = azulEscuro, modifier = Modifier.size(70.dp))
+                            if (fotoUriLocal != null) AsyncImage(model = fotoUriLocal, contentDescription = "Foto escolhida", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            else if (!fotoUrlSalva.isNullOrBlank()) FotoFirestore(fotoUrlSalva!!, "Foto do perfil", Modifier.fillMaxSize())
+                            else Icon(Icons.Default.Person, null, tint = azulEscuro, modifier = Modifier.size(70.dp))
                             Box(modifier = Modifier.align(Alignment.BottomEnd).size(36.dp).clip(CircleShape).background(azulLinhas), contentAlignment = Alignment.Center) { Icon(Icons.Default.PhotoCamera, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
                         }
                         Spacer(modifier = Modifier.height(14.dp)); Text(if (nome.isEmpty()) "Usuário" else nome, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White); Text(email, fontSize = 14.sp, color = Color.White.copy(alpha = 0.85f)); Text("Toque na foto para alterar", fontSize = 11.sp, color = Color.White.copy(alpha = 0.6f))
