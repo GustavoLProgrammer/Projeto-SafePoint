@@ -1,6 +1,5 @@
 package com.example.safepoint
 
-import androidx.compose.foundation.border
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -32,6 +31,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -85,6 +85,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -162,6 +164,10 @@ object PrefsHelper {
     fun setAltoContrasteAtivo(context: Context, ativo: Boolean) { getPrefs(context).edit().putBoolean("acess_alto_contraste", ativo).apply() }
     fun isCoresDiferenciadasAtiva(context: Context): Boolean = getPrefs(context).getBoolean("acess_cores_diferenciadas", false)
     fun setCoresDiferenciadasAtiva(context: Context, ativa: Boolean) { getPrefs(context).edit().putBoolean("acess_cores_diferenciadas", ativa).apply() }
+    fun isTextoMaiorAtivo(context: Context): Boolean = getPrefs(context).getBoolean("acess_texto_maior", false)
+    fun setTextoMaiorAtivo(context: Context, ativo: Boolean) { getPrefs(context).edit().putBoolean("acess_texto_maior", ativo).apply() }
+    fun isLeituraFacilitadaAtiva(context: Context): Boolean = getPrefs(context).getBoolean("acess_leitura_facilitada", false)
+    fun setLeituraFacilitadaAtiva(context: Context, ativa: Boolean) { getPrefs(context).edit().putBoolean("acess_leitura_facilitada", ativa).apply() }
 }
 
 private fun comprimirImagemParaFirestore(context: Context, uri: Uri): String? = try {
@@ -229,10 +235,10 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 val navController = rememberNavController(); val context = LocalContext.current
                 var acessibilidadeAberta by remember { mutableStateOf(false) }
-                var textoMaior by remember { mutableStateOf(false) }
+                var textoMaior by remember { mutableStateOf(PrefsHelper.isTextoMaiorAtivo(context)) }
                 var altoContraste by remember { mutableStateOf(PrefsHelper.isAltoContrasteAtivo(context)) }
                 var reduzirMovimento by remember { mutableStateOf(PrefsHelper.isReducaoMovimentoAtiva(context)) }
-                var leituraFacilitada by remember { mutableStateOf(false) }
+                var leituraFacilitada by remember { mutableStateOf(PrefsHelper.isLeituraFacilitadaAtiva(context)) }
                 var coresDiferenciadas by remember { mutableStateOf(PrefsHelper.isCoresDiferenciadasAtiva(context)) }
                 val termosAceitos = PrefsHelper.isTermosAceitos(context); val currentUser = auth.currentUser
                 val locDecidida = PrefsHelper.isLocalizacaoDecidida(context)
@@ -241,9 +247,13 @@ class MainActivity : ComponentActivity() {
                 val densidadeAtual = LocalDensity.current
                 CompositionLocalProvider(
                     LocalDensity provides Density(densidadeAtual.density, if (textoMaior) 1.18f else densidadeAtual.fontScale),
-                    LocalTextStyle provides LocalTextStyle.current.copy(letterSpacing = if (leituraFacilitada) 0.6.sp else LocalTextStyle.current.letterSpacing)
+                    LocalTextStyle provides LocalTextStyle.current.copy(
+                        letterSpacing = if (leituraFacilitada) 0.8.sp else LocalTextStyle.current.letterSpacing,
+                        lineHeight = if (leituraFacilitada) 22.sp else LocalTextStyle.current.lineHeight,
+                        fontWeight = if (leituraFacilitada) FontWeight.Medium else LocalTextStyle.current.fontWeight
+                    )
                 ) {
-                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFFFFBF0) else Color.Transparent).then(if (altoContraste) Modifier.border(3.dp, Color.Yellow) else Modifier)) {
+                Box(Modifier.fillMaxSize().background(if (altoContraste) Color.Black else if (coresDiferenciadas) Color(0xFFFFFBF0) else Color.Transparent).then(if (altoContraste) Modifier.border(3.dp, Color.Yellow) else if (coresDiferenciadas) Modifier.border(2.dp, Color(0xFF1565C0)) else Modifier)) {
                 NavHost(navController = navController, startDestination = startDest) {
                     composable(Screen.Termos.route) { TelaTermosUso(onAceitar = { PrefsHelper.setTermosAceitos(context, true); navController.navigate(Screen.PermissaoLocalizacao.route) { popUpTo(Screen.Termos.route) { inclusive = true } } }) }
                     composable(Screen.PermissaoLocalizacao.route) { TelaPermissaoLocalizacao(onAceitar = { PrefsHelper.setLocalizacaoAceita(context, true); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }, onRecusar = { PrefsHelper.setLocalizacaoAceita(context, false); PrefsHelper.setLocalizacaoDecidida(context, true); navController.navigate(Screen.PermissaoNotificacoes.route) { popUpTo(Screen.PermissaoLocalizacao.route) { inclusive = true } } }) }
@@ -263,10 +273,10 @@ class MainActivity : ComponentActivity() {
                 SmallFloatingActionButton(onClick = { acessibilidadeAberta = true }, modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 10.dp, end = 14.dp).semantics { contentDescription = "Abrir opções de acessibilidade" }, containerColor = if (altoContraste) Color.Yellow else azulEscuro) { Icon(Icons.Default.Accessibility, "Acessibilidade", tint = if (altoContraste) Color.Black else Color.White) }
                 if (acessibilidadeAberta) AlertDialog(onDismissRequest = { acessibilidadeAberta = false }, title = { Text("Acessibilidade") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Ajuste a leitura do SafePoint para suas necessidades.")
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Texto maior"); Switch(checked = textoMaior, onCheckedChange = { textoMaior = it }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Texto maior"); Switch(checked = textoMaior, onCheckedChange = { textoMaior = it; PrefsHelper.setTextoMaiorAtivo(context, it) }) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Alto contraste"); Switch(checked = altoContraste, onCheckedChange = { altoContraste = it; PrefsHelper.setAltoContrasteAtivo(context, it) }) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Reduzir movimentos"); Switch(checked = reduzirMovimento, onCheckedChange = { reduzirMovimento = it; PrefsHelper.setReducaoMovimentoAtiva(context, it) }) }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Leitura facilitada"); Switch(checked = leituraFacilitada, onCheckedChange = { leituraFacilitada = it }) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Leitura facilitada"); Switch(checked = leituraFacilitada, onCheckedChange = { leituraFacilitada = it; PrefsHelper.setLeituraFacilitadaAtiva(context, it) }) }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Text("Cores diferenciadas"); Switch(checked = coresDiferenciadas, onCheckedChange = { coresDiferenciadas = it; PrefsHelper.setCoresDiferenciadasAtiva(context, it) }) }
                 } }, confirmButton = { TextButton(onClick = { acessibilidadeAberta = false }) { Text("Fechar") } })
                 }
@@ -498,8 +508,20 @@ fun TelaRecuperarSenhaOriginal(navController: NavController, auth: FirebaseAuth)
 
 @Composable
 fun TelaPermissaoNotificacoes(onContinuar: () -> Unit) {
-    val notificacaoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { onContinuar() }
-    fun pedirNotificacao() { if (Build.VERSION.SDK_INT >= 33) notificacaoLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else onContinuar() }
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+    var abriuConfiguracoes by remember { mutableStateOf(false) }
+    DisposableEffect(activity, abriuConfiguracoes) {
+        val observador = LifecycleEventObserver { _, evento ->
+            if (evento == Lifecycle.Event.ON_RESUME && abriuConfiguracoes) {
+                val permitidas = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                if (permitidas) onContinuar()
+            }
+        }
+        activity?.lifecycle?.addObserver(observador)
+        onDispose { activity?.lifecycle?.removeObserver(observador) }
+    }
+    fun pedirNotificacao() { abriuConfiguracoes = true; abrirConfiguracoesNotificacoes(context) }
     Column(modifier = Modifier.fillMaxSize().background(Color.White).statusBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         LogoSafePoint(modifier = Modifier.size(92.dp)); Spacer(Modifier.height(24.dp))
         Text("Permissão de notificações", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = azulEscuro)
@@ -944,14 +966,14 @@ private fun criarAbrigosDemonstrativos(local: CidadeDemo, quantidade: Int, prefi
     val anguloInicial = Math.floorMod(seed + 210, 360).toDouble() * Math.PI / 180.0
     return (0 until total).map { indice ->
         val angulo = anguloInicial + (2.0 * Math.PI * indice / total)
-        val raioMetros = if (total == 1) 90000.0 else 90000.0 + indice * 40000.0
+        val raioMetros = if (total == 1) 3500.0 else 3500.0 + indice * 2500.0
         val ponto = deslocarCoordenadaDemo(local.lat, local.lng, raioMetros, angulo)
         val nomesConhecidos = when (SafePointDemoData.normalizar(local.nome)) {
-            "sao paulo" -> listOf("Hospital das Clínicas", "Hospital Municipal Dr. Cármino Caricchio", "Escola Estadual São Paulo", "3º Distrito Policial", "Centro Comunitário Sé", "Defesa Civil de São Paulo")
-            "rio de janeiro" -> listOf("Hospital Municipal Souza Aguiar", "Hospital Municipal Miguel Couto", "Escola Municipal do Rio", "17ª Delegacia de Polícia", "Centro Comunitário Carioca", "Defesa Civil do Rio")
-            "brasilia" -> listOf("Hospital de Base do Distrito Federal", "Hospital Regional da Asa Norte", "Escola Classe de Brasília", "Delegacia da área", "Centro Comunitário de Brasília", "Defesa Civil do Distrito Federal")
-            "london" -> listOf("Hospital St Thomas", "University College Hospital", "Escola pública de Londres", "Delegacia da Metropolitan Police", "Centro Comunitário de Londres", "Defesa Civil de Londres")
-            "new york" -> listOf("Bellevue Hospital", "NewYork-Presbyterian Hospital", "Escola pública de Nova York", "Delegacia do NYPD", "Centro Comunitário de Nova York", "Defesa Civil de Nova York")
+            "sao paulo" -> listOf("Hospital das Clínicas", "Escola Estadual São Paulo", "3º Distrito Policial", "Centro Comunitário Sé", "Defesa Civil de São Paulo", "Hospital Municipal Dr. Cármino Caricchio")
+            "rio de janeiro" -> listOf("Hospital Municipal Souza Aguiar", "Escola Municipal do Rio", "17ª Delegacia de Polícia", "Centro Comunitário Carioca", "Defesa Civil do Rio", "Hospital Municipal Miguel Couto")
+            "brasilia" -> listOf("Hospital de Base do Distrito Federal", "Escola Classe de Brasília", "Delegacia da área", "Centro Comunitário de Brasília", "Defesa Civil do Distrito Federal", "Hospital Regional da Asa Norte")
+            "london" -> listOf("Hospital St Thomas", "Escola pública de Londres", "Delegacia da Metropolitan Police", "Centro Comunitário de Londres", "Defesa Civil de Londres", "University College Hospital")
+            "new york" -> listOf("Bellevue Hospital", "Escola pública de Nova York", "Delegacia do NYPD", "Centro Comunitário de Nova York", "Defesa Civil de Nova York", "NewYork-Presbyterian Hospital")
             else -> listOf("Hospital público de $nomeLocal", "Escola municipal de $nomeLocal", "Delegacia local de $nomeLocal", "Corpo de Bombeiros de $nomeLocal", "Centro Comunitário de $nomeLocal", "Defesa Civil de $nomeLocal")
         }
         AbrigoDemo("$prefixo-${seed}-$indice", nomeLocal, nomesConhecidos[indice % nomesConhecidos.size], ponto.first, ponto.second)
@@ -1345,16 +1367,16 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             "mundo", "global", "world" -> {
                 val cidades = cidadesMundoDemo()
                 alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 2, "mapa-global", indice * 2) }.distinctBy { it.id }
-                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 4, "abrigo-global") }.distinctBy { it.id }
+                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 3, "abrigo-global") }.distinctBy { it.id }
             }
             "brasil", "brazil" -> {
                 val cidades = cidadesBrasilDemo()
                 alertas = cidades.flatMapIndexed { indice, cidade -> criarAlertasDemonstrativos(cidade, 1, "mapa-brasil", indice) }.distinctBy { it.id }
-                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 4, "abrigo-brasil") }.distinctBy { it.id }
+                abrigos = cidades.flatMap { criarAbrigosDemonstrativos(it, 3, "abrigo-brasil") }.distinctBy { it.id }
             }
             else -> {
                 alertas = criarAlertasDemonstrativos(local, 8, "mapa-local").distinctBy { it.id }
-                abrigos = criarAbrigosDemonstrativos(local, 6, "abrigo-local").distinctBy { it.id }
+                abrigos = criarAbrigosDemonstrativos(local, 4, "abrigo-local").distinctBy { it.id }
             }
         }
         alertasDoLocal = alertas
@@ -1365,8 +1387,8 @@ fun MapaScreenProfissional(navController: NavController, onVoltar: () -> Unit) {
             scope.launch {
                 val locaisReais = runCatching { OverpassRepository.buscarLocaisDeApoio(local.lat, local.lng, 5000) }.getOrDefault(emptyList())
                 if (locaisReais.isNotEmpty() && cidadeSelecionada == local) {
-                    val gerados = criarAbrigosDemonstrativos(local, 6, "abrigo-complementar")
-                    abrigosDoMapa = (locaisReais + gerados).distinctBy { "${it.nome}-${"%.3f".format(Locale.US, it.lat)}-${"%.3f".format(Locale.US, it.lng)}" }
+                    val gerados = if (locaisReais.size < 3) criarAbrigosDemonstrativos(local, 3 - locaisReais.size, "abrigo-complementar") else emptyList()
+                    abrigosDoMapa = (locaisReais + gerados).take(5).distinctBy { "${it.nome}-${"%.3f".format(Locale.US, it.lat)}-${"%.3f".format(Locale.US, it.lng)}" }
                     avisoBusca = "${alertas.size} alertas • ${abrigosDoMapa.size} locais de apoio identificados"
                     mapView.invalidate()
                 }
